@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+*.log
+.cache
+.turbo
+.idea
 
 # debug
 npm-debug.log*
@@ -30,8 +34,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (ignore all, allow .env.example as template)
 .env*
+!.env.example
 
 # vercel
 .vercel
