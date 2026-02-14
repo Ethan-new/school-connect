@@ -1,8 +1,7 @@
 import { MongoClient, type Db } from "mongodb";
 
-const uri = process.env.MONGODB_URI;
-
-const options = {};
+const directUri = process.env.MONGODB_URI_DIRECT;
+const uri = directUri || process.env.MONGODB_URI;
 
 declare global {
   // eslint-disable-next-line no-var -- required for Next.js connection caching
@@ -10,6 +9,12 @@ declare global {
 }
 
 let clientPromise: Promise<MongoClient> | null = null;
+
+const options = {
+  autoSelectFamily: false,
+  family: 4 as const,
+  serverSelectionTimeoutMS: 10000,
+};
 
 if (uri) {
   if (process.env.NODE_ENV === "development") {

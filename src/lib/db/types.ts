@@ -7,6 +7,8 @@ export interface User {
   _id?: ObjectId;
   auth0Id: string;
   role: UserRole;
+  /** Set when user completes first-time role selection (parent vs teacher) */
+  roleSelectedAt?: Date | null;
   name: string | null;
   email: string | null;
   picture?: string | null;
@@ -38,8 +40,12 @@ export interface Class {
   _id?: ObjectId;
   schoolId: string;
   name: string;
+  /** Unique code parents enter to join the class (e.g. "ABC12") */
+  code?: string;
   teacherIds: string[];
   studentIds: string[];
+  /** Auth0 user ids of parents who joined via the class code */
+  guardianIds?: string[];
   term: string;
   createdAt?: Date;
 }
@@ -82,7 +88,40 @@ export interface CalendarEvent {
   startAt: string;
   endAt: string;
   visibility: CalendarEventVisibility;
+  /** When true, parents in the class see a permission slip task to complete */
+  requiresPermissionSlip?: boolean;
+  /** Cost in dollars (e.g. 10.50). When set with requiresPermissionSlip, parents must choose payment method. */
+  cost?: number;
+  /** Recurring: multiple occurrence dates. Each date uses the same start/end time. */
+  occurrenceDates?: string[];
+  /** Recurring: cost per occurrence (e.g. $5 per pizza day). Total = costPerOccurrence × occurrenceDates.length */
+  costPerOccurrence?: number;
+  /** Teacher-uploaded permission form PDF (base64). Required for parents to download and sign. */
+  permissionFormPdfBase64?: string;
   createdAt?: Date;
+}
+
+// --- Event permission slips (simple sign-off per parent per event per student) ---
+export type EventPermissionSlipStatus = "pending" | "signed";
+
+export type PaymentMethod = "online" | "cash";
+
+export interface EventPermissionSlip {
+  _id?: ObjectId;
+  eventId: string;
+  classId: string;
+  /** Linked student - required for new slips; legacy slips may not have this */
+  studentId?: string;
+  guardianId: string;
+  status: EventPermissionSlipStatus;
+  signedAt?: Date;
+  /** Base64-encoded signed PDF uploaded by parent */
+  signedPdfBase64?: string;
+  /** How parent will pay when event has a cost */
+  paymentMethod?: PaymentMethod;
+  /** When teacher marks cash as received (for paymentMethod=cash) */
+  cashReceivedAt?: Date;
+  createdAt: Date;
 }
 
 // --- Report cards ---

@@ -14,6 +14,16 @@ export async function ensureIndexes(): Promise<void> {
     { name: "conversation_created" }
   );
 
+  // Event permission slips: guardianId for parent task lookup, eventId for teacher status
+  await db.collection("event_permission_slips").createIndex(
+    { guardianId: 1, status: 1 },
+    { name: "guardian_status" }
+  );
+  await db.collection("event_permission_slips").createIndex(
+    { eventId: 1 },
+    { name: "event_slips" }
+  );
+
   // Calendar events: classId + startAt, schoolId + startAt
   await db.collection("calendar_events").createIndex(
     { classId: 1, startAt: 1 },
@@ -48,6 +58,11 @@ export async function ensureIndexes(): Promise<void> {
   await db.collection("classes").createIndex(
     { schoolId: 1, term: 1 },
     { name: "school_term" }
+  );
+  // Classes: unique code for parent join lookup (sparse for classes without codes)
+  await db.collection("classes").createIndex(
+    { code: 1 },
+    { unique: true, sparse: true, name: "code_unique" }
   );
 
   // Conversations: participantIds for lookup, lastMessageAt for sorting

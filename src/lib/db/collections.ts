@@ -7,6 +7,7 @@ import {
   type Conversation,
   type Message,
   type CalendarEvent,
+  type EventPermissionSlip,
   type ReportCard,
   type PermissionForm,
   type Signature,
@@ -46,6 +47,14 @@ export function calendarEventsCollection(): Promise<
 > {
   return getDb(DB_NAME).then((db) =>
     db.collection<CalendarEvent>("calendar_events")
+  );
+}
+
+export function eventPermissionSlipsCollection(): Promise<
+  Collection<EventPermissionSlip>
+> {
+  return getDb(DB_NAME).then((db) =>
+    db.collection<EventPermissionSlip>("event_permission_slips")
   );
 }
 
