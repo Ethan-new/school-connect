@@ -292,7 +292,8 @@ export async function getParentInboxItems(
 
 /**
  * Marks an inbox item (permission slip) as read when the parent opens it.
- * Only updates if not already read; completed (signed) items stay completed.
+ * For informational events (no signature/cost): marks as signed (completed).
+ * For events needing action: sets readAt (read status).
  */
 export async function markInboxItemAsRead(
   auth0Id: string,
@@ -304,6 +305,7 @@ export async function markInboxItemAsRead(
 
   try {
     const slips = await eventPermissionSlipsCollection();
+    const events = await calendarEventsCollection();
     const slip = await slips.findOne({
       _id: new ObjectId(slipId),
       guardianId: auth0Id,
@@ -311,13 +313,36 @@ export async function markInboxItemAsRead(
     if (!slip) {
       return { success: false, error: "Item not found" };
     }
+    if (slip.status === "signed") {
+      return { success: true };
+    }
     if (slip.readAt) {
       return { success: true };
     }
-    await slips.updateOne(
-      { _id: new ObjectId(slipId), guardianId: auth0Id },
-      { $set: { readAt: new Date() } }
-    );
+
+    const event = await events.findOne({ _id: new ObjectId(slip.eventId) });
+    const effectiveCost = event ? getEventEffectiveCost(event) : undefined;
+    const hasCost = effectiveCost != null && effectiveCost > 0;
+    const needsAction = (event?.requiresPermissionSlip ?? false) || hasCost;
+
+    const now = new Date();
+    if (needsAction) {
+      await slips.updateOne(
+        { _id: new ObjectId(slipId), guardianId: auth0Id },
+        { $set: { readAt: now } }
+      );
+    } else {
+      await slips.updateOne(
+        { _id: new ObjectId(slipId), guardianId: auth0Id },
+        {
+          $set: {
+            readAt: now,
+            status: "signed",
+            signedAt: now,
+          },
+        }
+      );
+    }
     return { success: true };
   } catch (error) {
     console.error("[markInboxItemAsRead] Failed:", error);

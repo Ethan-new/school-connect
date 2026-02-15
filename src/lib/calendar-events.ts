@@ -138,11 +138,6 @@ export async function createCalendarEvent(
     });
 
     const eventId = result.insertedId?.toString();
-    const hasCost =
-      (cost != null && cost > 0) ||
-      (costPerOccurrence != null && costPerOccurrence > 0);
-    const needsAction =
-      (input.requiresPermissionSlip ?? false) || hasCost;
     if (input.classId && eventId) {
       const cls = await classes.findOne({
         _id: new ObjectId(input.classId),
@@ -165,7 +160,7 @@ export async function createCalendarEvent(
           classId: string;
           studentId: string;
           guardianId: string;
-          status: "pending" | "signed";
+          status: "pending";
           createdAt: Date;
         }> = [];
 
@@ -177,7 +172,7 @@ export async function createCalendarEvent(
               classId: input.classId!,
               studentId: student._id?.toString() ?? "",
               guardianId,
-              status: needsAction ? "pending" : "signed",
+              status: "pending",
               createdAt: new Date(),
             });
           }

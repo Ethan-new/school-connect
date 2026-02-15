@@ -175,17 +175,12 @@ export async function linkGuardianToStudent(
       });
       if (existing) continue;
 
-      const hasCost =
-        (event.cost != null && event.cost > 0) ||
-        (event.costPerOccurrence != null && event.costPerOccurrence > 0);
-      const needsAction = (event.requiresPermissionSlip ?? false) || hasCost;
-
       await slips.insertOne({
         eventId,
         classId,
         studentId,
         guardianId,
-        status: needsAction ? ("pending" as const) : ("signed" as const),
+        status: "pending" as const,
         createdAt: new Date(),
       });
     }

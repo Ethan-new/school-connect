@@ -66,28 +66,6 @@ function formatDueDate(iso: string): string {
   });
 }
 
-function formatOccurrenceDates(dates: string[]): string {
-  if (dates.length <= 3) {
-    return dates
-      .map((d) =>
-        new Date(d + "T12:00:00").toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        })
-      )
-      .join(", ");
-  }
-  const first = new Date(dates[0] + "T12:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-  const last = new Date(dates[dates.length - 1] + "T12:00:00").toLocaleDateString(
-    "en-US",
-    { month: "short", day: "numeric" }
-  );
-  return `${first} – ${last} (${dates.length} dates)`;
-}
-
 function formatEventTimeRange(startIso: string, endIso: string): string {
   const start = new Date(startIso);
   const end = new Date(endIso);
@@ -352,6 +330,10 @@ export function ParentDashboard({
   const [unsubmittingSlipId, setUnsubmittingSlipId] = useState<string | null>(null);
   const [openMenuClassId, setOpenMenuClassId] = useState<string | null>(null);
   const [expandedInboxId, setExpandedInboxId] = useState<string | null>(null);
+  const [readItemIds, setReadItemIds] = useState<Set<string>>(() => new Set());
+  const [completedItemIds, setCompletedItemIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [selectedMessageConversation, setSelectedMessageConversation] =
     useState<ParentConversationSummary | null>(null);
   const router = useRouter();
@@ -360,11 +342,20 @@ export function ParentDashboard({
 
   useEffect(() => {
     if (expandedInboxId) {
+      const item = inboxItems.find((i) => i.id === expandedInboxId);
+      const isInformational =
+        item &&
+        !item.requiresPermissionSlip &&
+        (item.cost == null || item.cost === 0);
+      setReadItemIds((prev) => new Set(prev).add(expandedInboxId));
+      if (isInformational) {
+        setCompletedItemIds((prev) => new Set(prev).add(expandedInboxId));
+      }
       markInboxItemAsReadAction(expandedInboxId).then((res) => {
         if (res.success) router.refresh();
       });
     }
-  }, [expandedInboxId, router]);
+  }, [expandedInboxId, router, inboxItems]);
 
   async function handlePaymentOnly(slipId: string, paymentMethod: "online" | "cash") {
     if (uploadingSlipId) return;
@@ -599,34 +590,44 @@ export function ParentDashboard({
                         }`}
                       >
                         <td className="px-4 py-3">
-                          {item.status === "completed" ? (
-                            <span className="flex items-center gap-2 text-sm text-emerald-600">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                <polyline points="22 4 12 14.01 9 11.01" />
-                              </svg>
-                              Completed
-                            </span>
-                          ) : item.status === "unread" ? (
-                            <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
-                              <span className="h-2 w-2 rounded-full bg-red-500" />
-                              Unread
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-2 text-sm text-zinc-600">
-                              Read
-                            </span>
-                          )}
+                          {(() => {
+                            const displayStatus =
+                              item.status === "completed" ||
+                              completedItemIds.has(item.id)
+                                ? "completed"
+                                : readItemIds.has(item.id) || item.status === "read"
+                                  ? "read"
+                                  : item.status;
+                            return displayStatus === "completed" ? (
+                              <span className="flex items-center gap-2 text-sm text-emerald-600">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="16"
+                                  height="16"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                  <polyline points="22 4 12 14.01 9 11.01" />
+                                </svg>
+                                Completed
+                              </span>
+                            ) : displayStatus === "unread" ? (
+                              <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
+                                <span className="h-2 w-2 rounded-full bg-red-500" />
+                                Unread
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2 text-sm text-amber-600">
+                                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                                Read
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <span className="font-medium text-zinc-900">
@@ -644,22 +645,8 @@ export function ParentDashboard({
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-zinc-600">
-                          {item.occurrenceDates &&
-                          item.occurrenceDates.length > 0 ? (
-                            <>
-                              {item.permissionSlipDueDate && (
-                                <>
-                                  Due by{" "}
-                                  {formatDueDate(item.permissionSlipDueDate)}
-                                  {" · "}
-                                </>
-                              )}
-                              {formatOccurrenceDates(item.occurrenceDates)}
-                            </>
-                          ) : (
-                            formatDueDate(
-                              item.permissionSlipDueDate ?? item.eventStartAt
-                            )
+                          {formatDueDate(
+                            item.permissionSlipDueDate ?? item.eventStartAt
                           )}
                         </td>
                       </tr>
@@ -734,29 +721,10 @@ export function ParentDashboard({
                         </p>
                       )}
                       <p className="text-sm text-zinc-600">
-                        {item.occurrenceDates &&
-                        item.occurrenceDates.length > 0 ? (
+                        {item.permissionSlipDueDate ? (
                           <>
-                            {formatEventTimeRange(
-                              item.eventStartAt,
-                              item.eventEndAt
-                            ).split(" · ")[1]}
-                            {" · "}
-                            {item.permissionSlipDueDate && (
-                              <>
-                                <span className="font-medium">
-                                  Due by{" "}
-                                  {formatDueDate(
-                                    item.permissionSlipDueDate
-                                  )}
-                                </span>
-                                {" · "}
-                              </>
-                            )}
-                            <span className="font-medium">
-                              All {item.occurrenceDates.length} dates:
-                            </span>{" "}
-                            {formatOccurrenceDates(item.occurrenceDates)}
+                            <span className="font-medium">Due by </span>
+                            {formatDueDate(item.permissionSlipDueDate)}
                           </>
                         ) : (
                           formatEventTimeRange(

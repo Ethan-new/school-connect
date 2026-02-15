@@ -209,13 +209,7 @@ async function main() {
     console.log(`✓ Linked ${linkedCount} students to parents for inbox items.`);
   }
 
-  const eventsNeedingSlips = events.filter(
-    (e, i) =>
-      (e.requiresPermissionSlip ||
-        (e.cost != null && e.cost > 0) ||
-        (e.costPerOccurrence != null && e.costPerOccurrence > 0)) &&
-      e.classId
-  );
+  const classEvents = events.filter((e) => e.classId);
 
   const slipsToInsert: Array<{
     eventId: string;
@@ -227,7 +221,7 @@ async function main() {
   }> = [];
   const slipKeys = new Set<string>();
 
-  for (const evt of eventsNeedingSlips) {
+  for (const evt of classEvents) {
     const evtIndex = events.indexOf(evt);
     const eventId = insertedIds[evtIndex];
     if (!eventId) continue;
@@ -243,7 +237,7 @@ async function main() {
           classId: evt.classId as string,
           studentId: student._id?.toString() ?? "",
           guardianId,
-          status: "pending",
+          status: "pending" as const,
           createdAt: now,
         });
       }
