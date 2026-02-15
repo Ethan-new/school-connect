@@ -1088,8 +1088,17 @@ export function TeacherDashboard({
               Interviews
             </button>
             <a
+              href="https://www.bing.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto mr-6 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white hover:bg-red-700"
+              aria-label="Help"
+            >
+              ?
+            </a>
+            <a
               href="/auth/logout"
-              className="ml-auto text-sm font-medium text-zinc-600 hover:text-zinc-900"
+              className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
             >
               Logout
             </a>
