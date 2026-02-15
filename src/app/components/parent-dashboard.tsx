@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -22,6 +22,7 @@ import type { ParentConversationSummary } from "@/lib/messaging";
 import {
   claimInterviewSlotAction,
   unclaimInterviewSlotAction,
+  markInboxItemAsReadAction,
 } from "@/app/actions";
 import { ParentMessageThreadModal } from "./parent-message-thread-modal";
 
@@ -357,6 +358,14 @@ export function ParentDashboard({
 
   const taskMap = new Map(permissionSlipTasks.map((t) => [t.id, t]));
 
+  useEffect(() => {
+    if (expandedInboxId) {
+      markInboxItemAsReadAction(expandedInboxId).then((res) => {
+        if (res.success) router.refresh();
+      });
+    }
+  }, [expandedInboxId, router]);
+
   async function handlePaymentOnly(slipId: string, paymentMethod: "online" | "cash") {
     if (uploadingSlipId) return;
     setUploadingSlipId(slipId);
@@ -590,12 +599,7 @@ export function ParentDashboard({
                         }`}
                       >
                         <td className="px-4 py-3">
-                          {item.status === "unread" ? (
-                            <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
-                              <span className="h-2 w-2 rounded-full bg-red-500" />
-                              Unread
-                            </span>
-                          ) : (
+                          {item.status === "completed" ? (
                             <span className="flex items-center gap-2 text-sm text-emerald-600">
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -613,12 +617,23 @@ export function ParentDashboard({
                               </svg>
                               Completed
                             </span>
+                          ) : item.status === "unread" ? (
+                            <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
+                              <span className="h-2 w-2 rounded-full bg-red-500" />
+                              Unread
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2 text-sm text-zinc-600">
+                              Read
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <span className="font-medium text-zinc-900">
                             {item.eventTitle}
-                            {item.status === "unread" && (
+                            {item.status !== "completed" &&
+                              (item.requiresPermissionSlip ||
+                                (item.cost ?? 0) > 0) && (
                               <span className="text-red-600">
                                 {" "}
                                 - {item.requiresPermissionSlip
@@ -656,7 +671,7 @@ export function ParentDashboard({
                         className="px-4 py-12 text-center text-zinc-600"
                       >
                         No items in your inbox. When your teacher adds events
-                        that require permission slips or payment, they&apos;ll appear here.
+                        for your child&apos;s class, they&apos;ll appear here.
                       </td>
                     </tr>
                   )}
@@ -765,7 +780,7 @@ export function ParentDashboard({
                           Due by {formatDueDate(item.permissionSlipDueDate)} (sign and submit payment)
                         </p>
                       )}
-                      {item.status === "unread" && task && !item.requiresPermissionSlip && (item.cost ?? 0) > 0 && (
+                      {item.status !== "completed" && task && !item.requiresPermissionSlip && (item.cost ?? 0) > 0 && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
                           <p className="mb-3 text-sm font-medium text-zinc-700">
                             How will you pay the ${item.cost!.toFixed(2)}?
@@ -795,13 +810,13 @@ export function ParentDashboard({
                           )}
                         </div>
                       )}
-                      {item.status === "unread" && task && item.requiresPermissionSlip && !item.hasPermissionForm && (
+                      {item.status !== "completed" && task && item.requiresPermissionSlip && !item.hasPermissionForm && (
                         <p className="text-sm text-zinc-500">
                           Your teacher is still preparing the permission form.
                           Please check back later.
                         </p>
                       )}
-                      {item.status === "unread" && task && item.requiresPermissionSlip && item.hasPermissionForm && (
+                      {item.status !== "completed" && task && item.requiresPermissionSlip && item.hasPermissionForm && (
                         <>
                           <div className="overflow-hidden rounded-lg border border-zinc-200">
                             <iframe

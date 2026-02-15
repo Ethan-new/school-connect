@@ -156,21 +156,10 @@ export async function linkGuardianToStudent(
     const relevantEvents = await events
       .find({
         classId,
-        $and: [
-          {
-            $or: [
-              { requiresPermissionSlip: true },
-              { cost: { $gt: 0 } },
-              { costPerOccurrence: { $gt: 0 } },
-            ],
-          },
-          {
-            $or: [
-              { startAt: { $gte: now } },
-              { startAt: { $lt: now }, endAt: { $gte: now } },
-              { occurrenceDates: { $elemMatch: { $gte: today } } },
-            ],
-          },
+        $or: [
+          { startAt: { $gte: now } },
+          { startAt: { $lt: now }, endAt: { $gte: now } },
+          { occurrenceDates: { $elemMatch: { $gte: today } } },
         ],
       })
       .toArray();
@@ -186,12 +175,17 @@ export async function linkGuardianToStudent(
       });
       if (existing) continue;
 
+      const hasCost =
+        (event.cost != null && event.cost > 0) ||
+        (event.costPerOccurrence != null && event.costPerOccurrence > 0);
+      const needsAction = (event.requiresPermissionSlip ?? false) || hasCost;
+
       await slips.insertOne({
         eventId,
         classId,
         studentId,
         guardianId,
-        status: "pending" as const,
+        status: needsAction ? ("pending" as const) : ("signed" as const),
         createdAt: new Date(),
       });
     }

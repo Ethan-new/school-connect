@@ -121,6 +121,8 @@ export interface EventPermissionSlip {
   guardianId: string;
   status: EventPermissionSlipStatus;
   signedAt?: Date;
+  /** When parent opened/viewed the inbox item (for read state) */
+  readAt?: Date;
   /** Base64-encoded signed PDF uploaded by parent */
   signedPdfBase64?: string;
   /** How parent will pay when event has a cost */

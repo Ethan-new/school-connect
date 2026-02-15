@@ -64,7 +64,7 @@ export interface InboxItem {
   className: string;
   studentId?: string;
   studentName?: string;
-  status: "unread" | "completed";
+  status: "unread" | "read" | "completed";
   /** Cost in dollars. When set, parent must choose payment method. */
   cost?: number;
   /** How parent will pay (when event has cost) */
@@ -257,7 +257,7 @@ export async function getParentInboxItems(
         : undefined;
       const effectiveCost = event ? getEventEffectiveCost(event) : undefined;
       const hasCost = effectiveCost != null && effectiveCost > 0;
-      if (event && cls && (event.requiresPermissionSlip || hasCost)) {
+      if (event && cls) {
         items.push({
           id: slip._id?.toString() ?? slip.eventId,
           eventId: slip.eventId,
@@ -268,7 +268,12 @@ export async function getParentInboxItems(
           className: cls.name,
           studentId: slip.studentId,
           studentName: student?.name,
-          status: slip.status === "signed" ? "completed" : "unread",
+          status:
+            slip.status === "signed"
+              ? "completed"
+              : slip.readAt
+                ? "read"
+                : "unread",
           cost: effectiveCost,
           paymentMethod: slip.paymentMethod,
           occurrenceDates: event.occurrenceDates,
@@ -282,6 +287,41 @@ export async function getParentInboxItems(
   } catch (error) {
     console.error("[getParentInboxItems] Failed:", error);
     return [];
+  }
+}
+
+/**
+ * Marks an inbox item (permission slip) as read when the parent opens it.
+ * Only updates if not already read; completed (signed) items stay completed.
+ */
+export async function markInboxItemAsRead(
+  auth0Id: string,
+  slipId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!isDbConfigured()) {
+    return { success: false, error: "Database not configured" };
+  }
+
+  try {
+    const slips = await eventPermissionSlipsCollection();
+    const slip = await slips.findOne({
+      _id: new ObjectId(slipId),
+      guardianId: auth0Id,
+    });
+    if (!slip) {
+      return { success: false, error: "Item not found" };
+    }
+    if (slip.readAt) {
+      return { success: true };
+    }
+    await slips.updateOne(
+      { _id: new ObjectId(slipId), guardianId: auth0Id },
+      { $set: { readAt: new Date() } }
+    );
+    return { success: true };
+  } catch (error) {
+    console.error("[markInboxItemAsRead] Failed:", error);
+    return { success: false, error: "Failed to mark as read" };
   }
 }
 

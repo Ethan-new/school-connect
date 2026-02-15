@@ -13,6 +13,7 @@ import {
   unsubmitPermissionSlip,
   uploadPermissionSlipForStudent,
   markCashReceived,
+  markInboxItemAsRead,
 } from "@/lib/event-permission-slips";
 import {
   addStudentsToClass,
@@ -152,6 +153,16 @@ export async function submitPaymentMethodAction(
   return result.success
     ? { success: true }
     : { success: false, error: result.error };
+}
+
+export async function markInboxItemAsReadAction(
+  slipId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return markInboxItemAsRead(session.user.sub, slipId);
 }
 
 export async function unsubmitSlipAction(
