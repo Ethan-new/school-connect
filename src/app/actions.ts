@@ -5,6 +5,7 @@ import { leaveClass } from "@/lib/class-code";
 import {
   createCalendarEvent,
   updateCalendarEvent,
+  deleteCalendarEvent,
   uploadEventPermissionForm,
 } from "@/lib/calendar-events";
 import {
@@ -91,6 +92,20 @@ export async function updateEventAction(
     eventId,
     input
   );
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error };
+}
+
+export async function deleteEventAction(
+  eventId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const result = await deleteCalendarEvent(session.user.sub, eventId);
   return result.success
     ? { success: true }
     : { success: false, error: result.error };

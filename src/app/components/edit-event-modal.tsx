@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { updateEventAction, uploadEventPermissionFormAction } from "@/app/actions";
+import { updateEventAction, deleteEventAction, uploadEventPermissionFormAction } from "@/app/actions";
 import type { CalendarEventSerialized } from "@/lib/teacher-dashboard";
 
 interface EditEventModalProps {
@@ -10,6 +10,8 @@ interface EditEventModalProps {
   className?: string;
   isOpen: boolean;
   onClose: () => void;
+  /** Called when event is deleted (e.g. to close permission slip modal) */
+  onDeleted?: (eventId: string) => void;
 }
 
 function parseDateTime(iso: string): { date: string; time: string } {
@@ -24,8 +26,10 @@ export function EditEventModal({
   className,
   isOpen,
   onClose,
+  onDeleted,
 }: EditEventModalProps) {
   const [title, setTitle] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
   const [startTime, setStartTime] = useState("09:00");
@@ -139,8 +143,26 @@ export function EditEventModal({
   }
 
   function handleClose() {
-    if (!isPending && !isUploadingForm) {
+    if (!isPending && !isUploadingForm && !isDeleting) {
       onClose();
+    }
+  }
+
+  async function handleDelete() {
+    if (!event) return;
+    if (!confirm("Are you sure you want to delete this event? This cannot be undone.")) {
+      return;
+    }
+    setIsDeleting(true);
+    setError(null);
+    const { success, error: err } = await deleteEventAction(event.id);
+    setIsDeleting(false);
+    if (success) {
+      onDeleted?.(event.id);
+      onClose();
+      router.refresh();
+    } else if (err) {
+      setError(err);
     }
   }
 
@@ -538,21 +560,31 @@ export function EditEventModal({
             </div>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-3 pt-2">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isPending || isDeleting}
+                className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isPending || isDeleting}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {isPending ? "Saving..." : "Save"}
+              </button>
+            </div>
             <button
               type="button"
-              onClick={handleClose}
-              disabled={isPending}
-              className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+              onClick={handleDelete}
+              disabled={isPending || isDeleting}
+              className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {isPending ? "Saving..." : "Save"}
+              {isDeleting ? "Deleting..." : "Delete event"}
             </button>
           </div>
         </form>

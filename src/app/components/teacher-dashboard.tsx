@@ -164,6 +164,10 @@ function TeacherCalendarView({
     setSelectedClassIds(null);
   }
 
+  function selectNoClasses() {
+    setSelectedClassIds(new Set());
+  }
+
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const monthName = viewDate.toLocaleDateString("en-US", {
@@ -319,9 +323,7 @@ function TeacherCalendarView({
                 <div className="absolute right-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-zinc-200 bg-white py-2 shadow-lg">
                   <button
                     type="button"
-                    onClick={() => {
-                      selectAllClasses();
-                    }}
+                    onClick={selectAllClasses}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
                   >
                     <span
@@ -339,6 +341,27 @@ function TeacherCalendarView({
                     </span>
                     All classes
                   </button>
+                  <button
+                    type="button"
+                    onClick={selectNoClasses}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                  >
+                    <span
+                      className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
+                        selectedClassIds !== null && selectedClassIds.size === 0
+                          ? "border-red-600 bg-red-600"
+                          : "border-zinc-300"
+                      }`}
+                    >
+                      {selectedClassIds !== null && selectedClassIds.size === 0 && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      )}
+                    </span>
+                    No classes
+                  </button>
+                  <div className="my-1 border-t border-zinc-200" />
                   {classes.map((cls) => {
                     const isSelected =
                       selectedClassIds === null ||
@@ -2868,6 +2891,12 @@ export function TeacherDashboard({
           }
           isOpen={!!editingEvent}
           onClose={() => setEditingEvent(null)}
+          onDeleted={(eventId) => {
+            if (selectedPermissionSlipEventId === eventId) {
+              setSelectedPermissionSlipEventId(null);
+              setSelectedSubmissionStudent(null);
+            }
+          }}
         />
       </main>
     </div>

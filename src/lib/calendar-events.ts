@@ -333,6 +333,60 @@ export async function updateCalendarEvent(
 }
 
 /**
+ * Deletes a calendar event and its permission slips. Verifies the teacher owns the class/school.
+ */
+export async function deleteCalendarEvent(
+  auth0Id: string,
+  eventId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (!isDbConfigured()) {
+    return { success: false, error: "Database not configured" };
+  }
+
+  if (!eventId || !/^[a-f0-9]{24}$/i.test(eventId)) {
+    return { success: false, error: "Invalid event" };
+  }
+
+  try {
+    const events = await calendarEventsCollection();
+    const classes = await classesCollection();
+
+    const event = await events.findOne({ _id: new ObjectId(eventId) });
+    if (!event) return { success: false, error: "Event not found" };
+
+    const teacherClasses = await classes
+      .find({ teacherIds: auth0Id })
+      .toArray();
+    const teacherSchoolIds = new Set(teacherClasses.map((c) => c.schoolId));
+    const teacherClassIds = new Set(
+      teacherClasses
+        .map((c) => c._id?.toString())
+        .filter((id): id is string => Boolean(id))
+    );
+
+    if (!teacherSchoolIds.has(event.schoolId)) {
+      return { success: false, error: "You don't have access to this event" };
+    }
+    if (
+      event.classId &&
+      !teacherClassIds.has(event.classId)
+    ) {
+      return { success: false, error: "You don't have access to this event" };
+    }
+
+    const slips = await eventPermissionSlipsCollection();
+    await slips.deleteMany({ eventId });
+
+    await events.deleteOne({ _id: new ObjectId(eventId) });
+
+    return { success: true };
+  } catch (error) {
+    console.error("[deleteCalendarEvent] Failed:", error);
+    return { success: false, error: "Failed to delete event. Please try again." };
+  }
+}
+
+/**
  * Uploads a custom permission form PDF for an event. Verifies the teacher owns the class.
  */
 export async function uploadEventPermissionForm(
