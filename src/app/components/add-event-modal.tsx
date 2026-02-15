@@ -47,11 +47,13 @@ export function AddEventModal({ classes, isOpen, onClose }: AddEventModalProps) 
   useEffect(() => {
     if (isOpen && classes.length > 0) {
       const today = new Date().toISOString().slice(0, 10);
+      /* eslint-disable react-hooks/set-state-in-effect -- Reset form defaults when modal opens */
       setStartDate(today);
       setEndDate(today);
       setPermissionSlipDueDate(today);
       setHasSeparateDueDate(false);
       setScope(classes[0].id);
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isOpen, classes]);
 

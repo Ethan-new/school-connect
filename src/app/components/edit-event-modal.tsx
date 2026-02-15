@@ -53,16 +53,17 @@ export function EditEventModal({
 
   useEffect(() => {
     if (isOpen && event) {
-      setTitle(event.title);
-      setDescription(event.description ?? "");
       const start = parseDateTime(event.startAt);
       const end = parseDateTime(event.endAt);
+      const recurring = !!(event.occurrenceDates && event.occurrenceDates.length > 1);
+      /* eslint-disable react-hooks/set-state-in-effect -- Sync form state when modal opens with event */
+      setTitle(event.title);
+      setDescription(event.description ?? "");
       setStartDate(start.date);
       setStartTime(start.time);
       setEndDate(end.date);
       setEndTime(end.time);
       setRequiresPermissionSlip(event.requiresPermissionSlip ?? false);
-      const recurring = !!(event.occurrenceDates && event.occurrenceDates.length > 1);
       setIsRecurring(recurring);
       setOccurrenceDates(event.occurrenceDates ?? []);
       setCost(
@@ -80,6 +81,7 @@ export function EditEventModal({
       setHasSeparateDueDate(Boolean(event.permissionSlipDueDate));
       setPermissionSlipDueDate(event.permissionSlipDueDate ?? start.date);
       setError(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isOpen, event]);
 

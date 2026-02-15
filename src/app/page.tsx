@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { getDbUser } from "@/lib/sync-user";
@@ -82,12 +83,12 @@ export default async function Home() {
                   <li>VPN, firewall, or school/corporate network blocking MongoDB</li>
                   <li>Try adding 0.0.0.0/0 in Atlas Network Access for testing</li>
                 </ul>
-                <a
+                <Link
                   href="/"
                   className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-medium text-white hover:bg-red-700"
                 >
                   Try again
-                </a>
+                </Link>
                 <a
                   href="/auth/logout"
                   className="mt-3 text-sm text-zinc-600 hover:text-zinc-900"

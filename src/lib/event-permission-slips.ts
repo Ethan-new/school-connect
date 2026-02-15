@@ -6,6 +6,7 @@ import {
   studentsCollection,
   usersCollection,
 } from "./db/collections";
+import type { Class } from "./db/types";
 import { isDbConfigured } from "./db";
 import { getEventEffectiveCost } from "./calendar-events";
 
@@ -537,7 +538,7 @@ export async function unsubmitPermissionSlipForTeacher(
     const event = await events.findOne({ _id: new ObjectId(slip.eventId) });
     if (!event) return { success: false, error: "Event not found" };
 
-    let cls: Awaited<ReturnType<typeof classes.findOne>> = null;
+    let cls: Class | null = null;
     if (event.classId) {
       cls = await classes.findOne({ _id: new ObjectId(event.classId) });
       if (!cls || !cls.teacherIds?.includes(teacherAuth0Id)) {
