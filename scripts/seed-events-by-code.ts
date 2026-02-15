@@ -144,7 +144,7 @@ async function main() {
       startAt: `${pictureDayThu}T09:00:00`,
       endAt: `${pictureDayThu}T11:00:00`,
       visibility: "class" as const,
-      requiresPermissionSlip: true,
+      requiresPermissionSlip: false,
       cost: 0,
       permissionSlipDueDate: dayBefore(pictureDayThu),
       createdAt: now,

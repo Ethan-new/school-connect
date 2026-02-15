@@ -630,9 +630,22 @@ export function ParentDashboard({
                         </td>
                         <td className="px-4 py-3 text-sm text-zinc-600">
                           {item.occurrenceDates &&
-                          item.occurrenceDates.length > 1
-                            ? formatOccurrenceDates(item.occurrenceDates)
-                            : formatDueDate(item.permissionSlipDueDate ?? item.eventStartAt)}
+                          item.occurrenceDates.length > 0 ? (
+                            <>
+                              {item.permissionSlipDueDate && (
+                                <>
+                                  Due by{" "}
+                                  {formatDueDate(item.permissionSlipDueDate)}
+                                  {" · "}
+                                </>
+                              )}
+                              {formatOccurrenceDates(item.occurrenceDates)}
+                            </>
+                          ) : (
+                            formatDueDate(
+                              item.permissionSlipDueDate ?? item.eventStartAt
+                            )
+                          )}
                         </td>
                       </tr>
                     ))
@@ -707,13 +720,24 @@ export function ParentDashboard({
                       )}
                       <p className="text-sm text-zinc-600">
                         {item.occurrenceDates &&
-                        item.occurrenceDates.length > 1 ? (
+                        item.occurrenceDates.length > 0 ? (
                           <>
                             {formatEventTimeRange(
                               item.eventStartAt,
                               item.eventEndAt
                             ).split(" · ")[1]}
                             {" · "}
+                            {item.permissionSlipDueDate && (
+                              <>
+                                <span className="font-medium">
+                                  Due by{" "}
+                                  {formatDueDate(
+                                    item.permissionSlipDueDate
+                                  )}
+                                </span>
+                                {" · "}
+                              </>
+                            )}
                             <span className="font-medium">
                               All {item.occurrenceDates.length} dates:
                             </span>{" "}
@@ -1240,14 +1264,14 @@ export function ParentDashboard({
                       <h3 className="font-medium text-zinc-900">
                         {cls.name}
                       </h3>
+                      <p className="mt-1 text-sm text-zinc-600">
+                        {cls.schoolName}
+                      </p>
                       {cls.children && cls.children.length > 0 && (
                         <p className="mt-1 text-sm text-zinc-600">
                           {cls.children.length === 1 ? "My child" : "My children"}: {cls.children.map((c) => c.name).join(", ")}
                         </p>
                       )}
-                      <p className="mt-1 text-sm text-zinc-600">
-                        {cls.schoolName}
-                      </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {cls.term}
                       </p>
