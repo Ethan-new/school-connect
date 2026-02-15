@@ -16,12 +16,24 @@ import type {
 } from "@/lib/parent-dashboard";
 import type { PermissionSlipTask, InboxItem } from "@/lib/event-permission-slips";
 
+import type { ReportCardSerialized } from "@/lib/report-cards";
+import type { ParentInterviewClass } from "@/lib/interview-slots";
+import type { ParentConversationSummary } from "@/lib/messaging";
+import {
+  claimInterviewSlotAction,
+  unclaimInterviewSlotAction,
+} from "@/app/actions";
+import { ParentMessageThreadModal } from "./parent-message-thread-modal";
+
 interface ParentDashboardProps {
   userName: string | null;
   classes: ParentClassSerialized[];
   upcomingEvents: CalendarEventSerialized[];
   permissionSlipTasks: PermissionSlipTask[];
   inboxItems: InboxItem[];
+  reportCards: ReportCardSerialized[];
+  interviewData: ParentInterviewClass[];
+  conversations: ParentConversationSummary[];
 }
 
 function formatEventDate(iso: string): string {
@@ -227,7 +239,94 @@ function CalendarView({
   );
 }
 
-type Tab = "inbox" | "calendar" | "mystudent";
+function formatSlotDateTime(startAt: string): string {
+  const d = new Date(startAt);
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function ParentInterviewClassSection({
+  item,
+  onClaim,
+  onUnclaim,
+}: {
+  item: import("@/lib/interview-slots").ParentInterviewClass;
+  onClaim: (slotId: string, studentId: string) => Promise<void>;
+  onUnclaim: (slotId: string) => Promise<void>;
+}) {
+  const [claimingSlotId, setClaimingSlotId] = useState<string | null>(null);
+  const availableSlots = item.slots.filter((s) => !s.isClaimed);
+
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <h3 className="font-medium text-zinc-900">{item.className}</h3>
+      <p className="mt-0.5 text-sm text-zinc-600">{item.schoolName}</p>
+      <div className="mt-4 space-y-3">
+        {item.children.map((child) => (
+          <div
+            key={child.id}
+            className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-zinc-800">{child.name}</span>
+              {child.claimedSlotId ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-zinc-600">
+                    {child.claimedSlotStartAt
+                      ? formatSlotDateTime(child.claimedSlotStartAt)
+                      : "Slot claimed"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUnclaim(child.claimedSlotId!)}
+                    className="text-sm font-medium text-red-600 hover:text-red-700"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const slotId = e.target.value;
+                    if (slotId) {
+                      setClaimingSlotId(slotId);
+                      onClaim(slotId, child.id).finally(() =>
+                        setClaimingSlotId(null)
+                      );
+                    }
+                  }}
+                  disabled={
+                    claimingSlotId !== null || availableSlots.length === 0
+                  }
+                  className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 disabled:opacity-50 [color-scheme:light]"
+                >
+                  <option value="">
+                    {availableSlots.length === 0
+                      ? "No slots available"
+                      : "Select a time..."}
+                  </option>
+                  {availableSlots.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {formatSlotDateTime(s.startAt)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type Tab = "inbox" | "calendar" | "mystudent" | "reportcards" | "interviews" | "messages";
 
 export function ParentDashboard({
   userName,
@@ -235,6 +334,9 @@ export function ParentDashboard({
   upcomingEvents,
   permissionSlipTasks,
   inboxItems,
+  reportCards,
+  interviewData,
+  conversations,
 }: ParentDashboardProps) {
   const firstName = userName?.split(/\s+/)[0] ?? "there";
   const [activeTab, setActiveTab] = useState<Tab>("inbox");
@@ -243,6 +345,8 @@ export function ParentDashboard({
   const [unsubmittingSlipId, setUnsubmittingSlipId] = useState<string | null>(null);
   const [openMenuClassId, setOpenMenuClassId] = useState<string | null>(null);
   const [expandedInboxId, setExpandedInboxId] = useState<string | null>(null);
+  const [selectedMessageConversation, setSelectedMessageConversation] =
+    useState<ParentConversationSummary | null>(null);
   const router = useRouter();
 
   const taskMap = new Map(permissionSlipTasks.map((t) => [t.id, t]));
@@ -403,6 +507,39 @@ export function ParentDashboard({
               }`}
             >
               My Student
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("reportcards")}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === "reportcards"
+                  ? "border-red-600 text-red-600"
+                  : "border-transparent text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Report Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("interviews")}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === "interviews"
+                  ? "border-red-600 text-red-600"
+                  : "border-transparent text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Interviews
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("messages")}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === "messages"
+                  ? "border-red-600 text-red-600"
+                  : "border-transparent text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Messages
             </button>
             <a
               href="/auth/logout"
@@ -859,6 +996,207 @@ export function ParentDashboard({
         {activeTab === "calendar" && (
           <section>
             <CalendarView events={upcomingEvents} />
+          </section>
+        )}
+
+        {/* Report cards tab */}
+        {activeTab === "reportcards" && (
+          <section>
+            <h2 className="mb-4 text-lg font-medium text-zinc-900">
+              Report Cards
+            </h2>
+            {reportCards.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
+                <p className="text-zinc-600">
+                  No published report cards yet. Report cards will appear here
+                  once your teacher publishes them.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {reportCards.map((rc) => (
+                  <div
+                    key={rc.id}
+                    className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-zinc-900">
+                          {rc.studentName} — {rc.term}
+                        </p>
+                        {rc.publishedAt && (
+                          <p className="mt-0.5 text-xs text-zinc-500">
+                            Published{" "}
+                            {new Date(rc.publishedAt).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              }
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                        Published
+                      </span>
+                    </div>
+                    <div className="mt-3 border-t border-zinc-100 pt-3">
+                      <div className="overflow-hidden rounded-lg border border-zinc-200">
+                        <iframe
+                          src={`/api/report-card/${rc.id}/download?preview=1`}
+                          title={`Report card ${rc.term}`}
+                          className="h-[400px] w-full min-h-[280px] bg-white"
+                        />
+                      </div>
+                      <a
+                        href={`/api/report-card/${rc.id}/download`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        Download PDF
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Interviews tab */}
+        {activeTab === "interviews" && (
+          <section>
+            <h2 className="mb-4 text-lg font-medium text-zinc-900">
+              Parent-Teacher Interviews
+            </h2>
+            <p className="mb-4 text-sm text-zinc-600">
+              Claim one time slot per child. Select your child and choose an
+              available slot.
+            </p>
+            {interviewData.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
+                <p className="text-zinc-600">
+                  No interview slots available yet. Check back when your teacher
+                  adds them.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {interviewData.map((item) => (
+                  <ParentInterviewClassSection
+                    key={item.classId}
+                    item={item}
+                    onClaim={async (slotId, studentId) => {
+                      const res = await claimInterviewSlotAction(
+                        slotId,
+                        studentId
+                      );
+                      if (res.success) router.refresh();
+                      else if (res.error) alert(res.error);
+                    }}
+                    onUnclaim={async (slotId) => {
+                      const res = await unclaimInterviewSlotAction(slotId);
+                      if (res.success) router.refresh();
+                      else if (res.error) alert(res.error);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Messages tab */}
+        {activeTab === "messages" && (
+          <section>
+            <h2 className="mb-4 text-lg font-medium text-zinc-900">
+              Messages
+            </h2>
+            {conversations.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
+                <p className="text-zinc-600">
+                  No messages yet. When your teacher sends you a message about
+                  your child, it will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                <ul className="divide-y divide-zinc-200">
+                  {conversations.map((conv) => (
+                    <li key={conv.conversationId}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedMessageConversation(conv)
+                        }
+                        className="grid w-full grid-cols-[1fr_auto_2rem] items-center gap-4 px-4 py-3 text-left hover:bg-zinc-50"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-medium text-zinc-900">
+                            {conv.teacherName} — {conv.studentName}
+                          </span>
+                          {conv.lastMessagePreview ? (
+                            <p className="mt-0.5 truncate text-sm text-zinc-500">
+                              {conv.lastMessagePreview}
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 text-sm text-zinc-400">
+                              Start conversation
+                            </p>
+                          )}
+                        </div>
+                        {conv.messageCount ? (
+                          <span className="text-xs text-zinc-500">
+                            {conv.messageCount} message
+                            {conv.messageCount !== 1 ? "s" : ""}
+                          </span>
+                        ) : null}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          className="shrink-0 text-zinc-400"
+                        >
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {selectedMessageConversation && (
+              <ParentMessageThreadModal
+                conversationId={selectedMessageConversation.conversationId}
+                teacherName={selectedMessageConversation.teacherName}
+                studentName={selectedMessageConversation.studentName}
+                isOpen={true}
+                onClose={() => {
+                  setSelectedMessageConversation(null);
+                  router.refresh();
+                }}
+              />
+            )}
           </section>
         )}
 

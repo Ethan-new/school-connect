@@ -9,6 +9,8 @@ export interface User {
   role: UserRole;
   /** Set when user completes first-time role selection (parent vs teacher) */
   roleSelectedAt?: Date | null;
+  /** Set when parent completes name step in onboarding */
+  parentNameSetAt?: Date | null;
   name: string | null;
   email: string | null;
   picture?: string | null;
@@ -125,12 +127,6 @@ export interface EventPermissionSlip {
 }
 
 // --- Report cards ---
-export interface ReportCardSubject {
-  name: string;
-  level: string;
-  comment?: string;
-}
-
 export type ReportCardStatus = "draft" | "published";
 
 export interface ReportCard {
@@ -138,8 +134,7 @@ export interface ReportCard {
   studentId: string;
   term: string;
   teacherId: string;
-  subjects: ReportCardSubject[];
-  overallComment?: string;
+  pdfBase64: string;
   status: ReportCardStatus;
   publishedAt?: Date;
   createdAt?: Date;
@@ -188,4 +183,23 @@ export interface Signature {
   signatureImageUrl?: string | null;
   signatureHash: string;
   formSnapshot: FormSnapshot;
+}
+
+// --- Interview slots ---
+export interface InterviewSlot {
+  _id?: ObjectId;
+  classId: string;
+  /** Start time (ISO string) */
+  startAt: string;
+  /** End time (ISO string). Default ~15 min after start. */
+  endAt: string;
+  /** When claimed: the student this slot is for */
+  studentId?: string;
+  /** When claimed: the guardian who claimed it (has account) */
+  guardianId?: string;
+  /** When teacher books for parent without account */
+  manualGuardianName?: string;
+  /** When teacher books for parent without account */
+  manualGuardianEmail?: string;
+  createdAt?: Date;
 }

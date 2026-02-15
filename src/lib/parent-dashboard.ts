@@ -8,6 +8,12 @@ import {
   calendarEventsCollection,
 } from "./db/collections";
 import type { InboxItem } from "./event-permission-slips";
+import { getPublishedReportCardsForGuardian } from "./report-cards";
+import type { ReportCardSerialized } from "./report-cards";
+import { getInterviewDataForGuardian } from "./interview-slots";
+import type { ParentInterviewClass } from "./interview-slots";
+import { getConversationsForParent } from "./messaging";
+import type { ParentConversationSummary } from "./messaging";
 import { isDbConfigured } from "./db";
 
 export interface ParentClassWithSchool extends Class {
@@ -41,6 +47,9 @@ export interface ParentDashboardData {
   upcomingEvents: CalendarEventSerialized[];
   permissionSlipTasks: PermissionSlipTask[];
   inboxItems: InboxItem[];
+  reportCards: ReportCardSerialized[];
+  interviewData: ParentInterviewClass[];
+  conversations: ParentConversationSummary[];
 }
 
 /**
@@ -163,18 +172,31 @@ export async function getParentDashboardData(
 ): Promise<ParentDashboardData> {
   const { getParentInboxItems } = await import("./event-permission-slips");
 
-  const [classes, upcomingEvents, permissionSlipTasks, inboxItems] =
-    await Promise.all([
-      getParentClasses(auth0Id),
-      getParentUpcomingEvents(auth0Id),
-      getParentPermissionSlipTasks(auth0Id),
-      getParentInboxItems(auth0Id),
-    ]);
+  const [
+    classes,
+    upcomingEvents,
+    permissionSlipTasks,
+    inboxItems,
+    reportCards,
+    interviewData,
+    conversations,
+  ] = await Promise.all([
+    getParentClasses(auth0Id),
+    getParentUpcomingEvents(auth0Id),
+    getParentPermissionSlipTasks(auth0Id),
+    getParentInboxItems(auth0Id),
+    getPublishedReportCardsForGuardian(auth0Id),
+    getInterviewDataForGuardian(auth0Id),
+    getConversationsForParent(auth0Id),
+  ]);
 
   return {
     classes: classes.map(serializeClass),
     upcomingEvents: upcomingEvents.map(serializeEvent),
     permissionSlipTasks,
     inboxItems,
+    reportCards,
+    interviewData,
+    conversations,
   };
 }

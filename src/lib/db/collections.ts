@@ -11,6 +11,7 @@ import {
   type ReportCard,
   type PermissionForm,
   type Signature,
+  type InterviewSlot,
 } from "./types";
 import { getDb } from "../db";
 
@@ -75,5 +76,13 @@ export function permissionFormsCollection(): Promise<
 export function signaturesCollection(): Promise<Collection<Signature>> {
   return getDb(DB_NAME).then((db) =>
     db.collection<Signature>("signatures")
+  );
+}
+
+export function interviewSlotsCollection(): Promise<
+  Collection<InterviewSlot>
+> {
+  return getDb(DB_NAME).then((db) =>
+    db.collection<InterviewSlot>("interview_slots")
   );
 }

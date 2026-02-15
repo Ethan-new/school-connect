@@ -103,8 +103,13 @@ export default async function Home() {
     if (!dbUser?.roleSelectedAt) {
       redirect("/onboarding");
     }
-    if (dbUser.role === "parent" && !(await parentHasJoinedClass(session.user.sub))) {
-      redirect("/onboarding/class-code");
+    if (dbUser.role === "parent") {
+      if (!dbUser.parentNameSetAt) {
+        redirect("/onboarding/parent-name");
+      }
+      if (!(await parentHasJoinedClass(session.user.sub))) {
+        redirect("/onboarding/class-code");
+      }
     }
     if (dbUser.role === "teacher" && !(await teacherHasClass(session.user.sub))) {
       redirect("/onboarding/create-class");
@@ -120,6 +125,9 @@ export default async function Home() {
         upcomingEvents={dashboardData.upcomingEvents}
         permissionSlipTasks={dashboardData.permissionSlipTasks}
         inboxItems={dashboardData.inboxItems}
+        reportCards={dashboardData.reportCards}
+        interviewData={dashboardData.interviewData}
+        conversations={dashboardData.conversations}
       />
     );
   }
@@ -133,6 +141,10 @@ export default async function Home() {
         upcomingEvents={dashboardData.upcomingEvents}
         permissionSlipEvents={dashboardData.permissionSlipEvents}
         permissionSlipStatus={dashboardData.permissionSlipStatus}
+        reportCards={dashboardData.reportCards}
+        interviewSlotsByClass={dashboardData.interviewSlotsByClass}
+        studentsWithGuardians={dashboardData.studentsWithGuardians}
+        conversationSummaries={dashboardData.conversationSummaries}
       />
     );
   }

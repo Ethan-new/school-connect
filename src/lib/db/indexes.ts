@@ -96,4 +96,10 @@ export async function ensureIndexes(): Promise<void> {
     { formId: 1, studentId: 1 },
     { unique: true, name: "form_student_unique" }
   );
+
+  // Interview slots: classId + startAt for teacher/parent lookup
+  await db.collection("interview_slots").createIndex(
+    { classId: 1, startAt: 1 },
+    { name: "class_start" }
+  );
 }

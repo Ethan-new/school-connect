@@ -23,12 +23,12 @@ export function RoleSelectForm() {
   }
 
   return (
-    <div className="flex w-full max-w-xs flex-col gap-3">
+    <div className="flex w-full flex-col gap-3">
       <button
         type="button"
         onClick={() => handleSelect("parent")}
         disabled={isPending}
-        className="flex h-14 w-full items-center justify-center rounded-full bg-foreground px-5 text-base font-medium text-background transition-colors hover:bg-[#383838] disabled:opacity-50 dark:hover:bg-[#ccc] dark:hover:text-black"
+        className="flex h-11 w-full items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
       >
         {isPending ? "..." : "I'm a Parent"}
       </button>
@@ -36,14 +36,12 @@ export function RoleSelectForm() {
         type="button"
         onClick={() => handleSelect("teacher")}
         disabled={isPending}
-        className="flex h-14 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 text-base font-medium transition-colors hover:border-transparent hover:bg-black/[.04] disabled:opacity-50 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+        className="flex h-11 w-full items-center justify-center rounded-lg border border-zinc-300 bg-white px-5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
       >
         {isPending ? "..." : "I'm a Teacher"}
       </button>
       {error && (
-        <p className="text-center text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
+        <p className="text-center text-sm text-red-600">{error}</p>
       )}
     </div>
   );

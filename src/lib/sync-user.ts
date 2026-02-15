@@ -39,12 +39,19 @@ export async function syncUserToDb(
 
     let role: UserRole;
     let schoolId: string | null;
+    let nameToSet: string | null;
     if (existingUser?.roleSelectedAt) {
       role = existingUser.role;
       schoolId = appMetadata?.schoolId ?? existingUser.schoolId ?? null;
     } else {
       role = parseRole(appMetadata?.role ?? "parent");
       schoolId = appMetadata?.schoolId ?? null;
+    }
+    // Preserve name if parent completed onboarding name step
+    if (existingUser?.parentNameSetAt) {
+      nameToSet = existingUser.name ?? name ?? null;
+    } else {
+      nameToSet = name ?? null;
     }
 
     await users.updateOne(
@@ -54,7 +61,7 @@ export async function syncUserToDb(
           auth0Id,
           role,
           email: email ?? null,
-          name: name ?? null,
+          name: nameToSet,
           picture: picture ?? null,
           schoolId,
           updatedAt: now,
@@ -91,6 +98,37 @@ export async function setUserRole(auth0Id: string, role: UserRole): Promise<bool
     return result.modifiedCount > 0 || result.matchedCount > 0;
   } catch (error) {
     console.error("[setUserRole] Failed to update role:", error);
+    return false;
+  }
+}
+
+/**
+ * Updates the user's name and marks parent name step complete (from parent onboarding).
+ */
+export async function setParentName(
+  auth0Id: string,
+  name: string | null
+): Promise<boolean> {
+  if (!isDbConfigured()) return false;
+  const trimmed = name?.trim() || null;
+  if (!trimmed) return false;
+
+  try {
+    const users = await usersCollection();
+    const now = new Date();
+    const result = await users.updateOne(
+      { auth0Id },
+      {
+        $set: {
+          name: trimmed,
+          parentNameSetAt: now,
+          updatedAt: now,
+        },
+      }
+    );
+    return result.modifiedCount > 0 || result.matchedCount > 0;
+  } catch (error) {
+    console.error("[setParentName] Failed:", error);
     return false;
   }
 }

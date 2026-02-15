@@ -8,7 +8,10 @@ import type {
   TeacherClassSerialized,
   CalendarEventSerialized,
   ClassStudentSerialized,
+  TeacherInterviewClass,
+  StudentWithGuardians,
 } from "@/lib/teacher-dashboard";
+import type { ReportCardSerialized } from "@/lib/report-cards";
 import type {
   EventPermissionStatus,
   EventPermissionStatusByStudent,
@@ -22,7 +25,16 @@ import {
   uploadEventPermissionFormAction,
   uploadPermissionSlipForStudentAction,
   markCashReceivedAction,
+  publishReportCardAction,
 } from "@/app/actions";
+import { AddReportCardModal } from "./add-report-card-modal";
+import { AddInterviewSlotsModal } from "./add-interview-slots-modal";
+import { BookSlotModal } from "./book-slot-modal";
+import {
+  deleteInterviewSlotAction,
+  unbookInterviewSlotAction,
+} from "@/app/actions";
+import { MessageThreadModal } from "./message-thread-modal";
 
 interface TeacherDashboardProps {
   userName: string | null;
@@ -30,6 +42,18 @@ interface TeacherDashboardProps {
   upcomingEvents: CalendarEventSerialized[];
   permissionSlipEvents: CalendarEventSerialized[];
   permissionSlipStatus: EventPermissionStatus[];
+  reportCards: ReportCardSerialized[];
+  interviewSlotsByClass: TeacherInterviewClass[];
+  studentsWithGuardians: StudentWithGuardians[];
+  conversationSummaries: Record<
+    string,
+    {
+      conversationId: string;
+      lastMessageAt: string;
+      lastMessagePreview: string | null;
+      messageCount: number;
+    }
+  >;
 }
 
 function formatEventDate(iso: string): string {
@@ -630,7 +654,7 @@ function StudentRow({
   );
 }
 
-type Tab = "classes" | "permissionslips" | "events" | "messages";
+type Tab = "classes" | "permissionslips" | "events" | "messages" | "reportcards" | "interviews";
 
 export function TeacherDashboard({
   userName,
@@ -638,10 +662,23 @@ export function TeacherDashboard({
   upcomingEvents,
   permissionSlipEvents,
   permissionSlipStatus,
+  reportCards,
+  interviewSlotsByClass,
+  studentsWithGuardians,
+  conversationSummaries,
 }: TeacherDashboardProps) {
   const router = useRouter();
+  const [slotsByClass, setSlotsByClass] = useState(interviewSlotsByClass);
+  const [permissionSlipStatusState, setPermissionSlipStatusState] =
+    useState(permissionSlipStatus);
+  useEffect(() => {
+    setSlotsByClass(interviewSlotsByClass);
+  }, [interviewSlotsByClass]);
+  useEffect(() => {
+    setPermissionSlipStatusState(permissionSlipStatus);
+  }, [permissionSlipStatus]);
   const statusByEvent = new Map(
-    permissionSlipStatus.map((s) => [s.eventId, s])
+    permissionSlipStatusState.map((s) => [s.eventId, s])
   );
   const firstName = userName?.split(/\s+/)[0] ?? "there";
   const [activeTab, setActiveTab] = useState<Tab>("classes");
@@ -664,6 +701,41 @@ export function TeacherDashboard({
   const [uploadingManualSlipFor, setUploadingManualSlipFor] = useState<
     string | null
   >(null);
+  const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<{
+    id: string;
+    name: string;
+    classTerm: string;
+  } | null>(null);
+  const [addReportCardStudent, setAddReportCardStudent] = useState<{
+    id: string;
+    name: string;
+    classTerm: string;
+  } | null>(null);
+  const [publishPendingReportCardId, setPublishPendingReportCardId] =
+    useState<string | null>(null);
+  const [bookSlotFor, setBookSlotFor] = useState<{
+    slot: import("@/lib/interview-slots").InterviewSlotSerialized;
+    classId: string;
+    className: string;
+    studentIdsWithSlot: string[];
+  } | null>(null);
+  const [openSlotMenuId, setOpenSlotMenuId] = useState<string | null>(null);
+  const [deletingSlotId, setDeletingSlotId] = useState<string | null>(null);
+  const [unbookingSlotId, setUnbookingSlotId] = useState<string | null>(null);
+  const [selectedMessageStudent, setSelectedMessageStudent] = useState<{
+    studentId: string;
+    studentName: string;
+    schoolId: string;
+  } | null>(null);
+  const [selectedMessageGuardian, setSelectedMessageGuardian] = useState<{
+    guardianId: string;
+    guardianName: string;
+    conversationId: string | null;
+  } | null>(null);
+  const [addSlotsClass, setAddSlotsClass] = useState<{
+    classId: string;
+    className: string;
+  } | null>(null);
 
   useEffect(() => {
     setPermissionFormFileSelected(false);
@@ -729,6 +801,28 @@ export function TeacherDashboard({
               }`}
             >
               Messages
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("reportcards")}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === "reportcards"
+                  ? "border-red-600 text-red-600"
+                  : "border-transparent text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Report Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("interviews")}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === "interviews"
+                  ? "border-red-600 text-red-600"
+                  : "border-transparent text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              Interviews
             </button>
             <a
               href="/auth/logout"
@@ -969,11 +1063,736 @@ export function TeacherDashboard({
           <h2 className="mb-4 text-lg font-medium text-zinc-900">
             Messages
           </h2>
-          <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
-            <p className="text-zinc-600">
-              Direct messaging with parents coming soon.
+          {studentsWithGuardians.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
+              <p className="text-zinc-600">
+                No students with linked parents yet. Link parents to students in
+                My Classes to message them.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+              <ul className="divide-y divide-zinc-200">
+                {studentsWithGuardians.map((swg) => {
+                  const guardianCount = swg.guardians.length;
+                  const schoolId =
+                    classes.find((c) =>
+                      c.studentIds?.includes(swg.studentId)
+                    )?.schoolId ?? "";
+                  return (
+                    <li key={swg.studentId}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedMessageStudent({
+                            studentId: swg.studentId,
+                            studentName: swg.studentName,
+                            schoolId,
+                          })
+                        }
+                        className="grid w-full grid-cols-[1fr_7.5rem_2rem] items-center gap-4 px-4 py-3 text-left hover:bg-zinc-50"
+                      >
+                        <span className="min-w-0 truncate font-medium text-zinc-900">
+                          {swg.studentName}
+                        </span>
+                        <span className="text-right text-sm text-zinc-500">
+                          {guardianCount} parent{guardianCount !== 1 ? "s" : ""}
+                        </span>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          className="shrink-0 text-zinc-400"
+                        >
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+          {selectedMessageStudent && !selectedMessageGuardian && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setSelectedMessageStudent(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="messages-modal-title"
+            >
+              <div
+                className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-4">
+                  <h2
+                    id="messages-modal-title"
+                    className="text-lg font-semibold text-zinc-900"
+                  >
+                    Messages — {selectedMessageStudent.studentName}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMessageStudent(null)}
+                    className="rounded p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="Close"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <ul className="divide-y divide-zinc-200">
+                  {(() => {
+                    const swg = studentsWithGuardians.find(
+                      (s) => s.studentId === selectedMessageStudent.studentId
+                    );
+                    if (!swg) return null;
+                    return swg.guardians.map((g) => {
+                      const key = `${g.guardianId}:${swg.studentId}`;
+                      const sum = conversationSummaries[key];
+                      return (
+                        <li key={g.guardianId}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedMessageGuardian({
+                                guardianId: g.guardianId,
+                                guardianName: g.guardianName,
+                                conversationId: sum?.conversationId ?? null,
+                              })
+                            }
+                            className="grid w-full grid-cols-[1fr_auto_2rem] items-center gap-4 px-6 py-3 text-left hover:bg-zinc-50"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-medium text-zinc-900">
+                                {g.guardianName}
+                              </span>
+                              {sum?.lastMessagePreview ? (
+                                <p className="mt-0.5 truncate text-sm text-zinc-500">
+                                  {sum.lastMessagePreview}
+                                </p>
+                              ) : (
+                                <p className="mt-0.5 text-sm text-zinc-400">
+                                  Start conversation
+                                </p>
+                              )}
+                            </div>
+                            {sum?.messageCount ? (
+                              <span className="text-xs text-zinc-500">
+                                {sum.messageCount} message
+                                {sum.messageCount !== 1 ? "s" : ""}
+                              </span>
+                            ) : null}
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              className="shrink-0 text-zinc-400"
+                            >
+                              <path d="m9 18 6-6-6-6" />
+                            </svg>
+                          </button>
+                        </li>
+                      );
+                    });
+                  })()}
+                </ul>
+              </div>
+            </div>
+          )}
+          {selectedMessageStudent && selectedMessageGuardian && (
+            <MessageThreadModal
+              guardianId={selectedMessageGuardian.guardianId}
+              guardianName={selectedMessageGuardian.guardianName}
+              studentId={selectedMessageStudent.studentId}
+              studentName={selectedMessageStudent.studentName}
+              schoolId={selectedMessageStudent.schoolId}
+              existingConversationId={
+                selectedMessageGuardian.conversationId
+              }
+              isOpen={true}
+              onClose={() => {
+                setSelectedMessageGuardian(null);
+                setSelectedMessageStudent(null);
+                router.refresh();
+              }}
+            />
+          )}
+        </section>
+        )}
+
+        {/* Report cards tab */}
+        {activeTab === "reportcards" && (
+        <section>
+          <h2 className="mb-4 text-lg font-medium text-zinc-900">
+            Report Cards
+          </h2>
+          {(() => {
+            const students = (() => {
+              const seen = new Set<string>();
+              const out: { id: string; name: string; classTerm: string }[] = [];
+              for (const cls of classes) {
+                for (const s of cls.students) {
+                  if (!seen.has(s.id)) {
+                    seen.add(s.id);
+                    out.push({ id: s.id, name: s.name, classTerm: cls.term });
+                  }
+                }
+              }
+              return out.sort((a, b) => a.name.localeCompare(b.name));
+            })();
+            const cardsByStudent = new Map<string, ReportCardSerialized[]>();
+            for (const rc of reportCards) {
+              const list = cardsByStudent.get(rc.studentId) ?? [];
+              list.push(rc);
+              cardsByStudent.set(rc.studentId, list);
+            }
+            return (
+              <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                <ul className="divide-y divide-zinc-200">
+                  {students.map((stu) => {
+                    const cards = cardsByStudent.get(stu.id) ?? [];
+                    return (
+                      <li key={stu.id}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedReportCardStudent({
+                              id: stu.id,
+                              name: stu.name,
+                              classTerm: stu.classTerm,
+                            })
+                          }
+                          className="grid w-full grid-cols-[1fr_7.5rem_2rem] items-center gap-4 px-4 py-3 text-left hover:bg-zinc-50"
+                        >
+                          <span className="min-w-0 truncate font-medium text-zinc-900">
+                            {stu.name}
+                          </span>
+                          <span className="text-right text-sm text-zinc-500">
+                            {cards.length} report card{cards.length !== 1 ? "s" : ""}
+                          </span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="shrink-0 text-zinc-400"
+                          >
+                            <path d="m9 18 6-6-6-6" />
+                          </svg>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })()}
+          {selectedReportCardStudent && !addReportCardStudent && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setSelectedReportCardStudent(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="report-cards-modal-title"
+            >
+              <div
+                className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-4">
+                  <h2
+                    id="report-cards-modal-title"
+                    className="text-lg font-semibold text-zinc-900"
+                  >
+                    Report Cards — {selectedReportCardStudent.name}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReportCardStudent(null)}
+                    className="rounded p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="Close"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-4 px-6 py-5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAddReportCardStudent(selectedReportCardStudent)
+                    }
+                    className="w-full rounded-lg border border-dashed border-zinc-300 py-3 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50/50"
+                  >
+                    + Add report card
+                  </button>
+                  {(() => {
+                    const cards = reportCards.filter(
+                      (rc) => rc.studentId === selectedReportCardStudent.id
+                    );
+                    if (cards.length === 0) {
+                      return (
+                        <p className="py-4 text-center text-sm text-zinc-500">
+                          No report cards yet.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="space-y-3">
+                        {cards.map((rc) => (
+                          <div
+                            key={rc.id}
+                            className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-zinc-800">
+                                {rc.term}
+                              </span>
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                  rc.status === "published"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {rc.status}
+                              </span>
+                            </div>
+                            <div className="mt-2 overflow-hidden rounded border border-zinc-200">
+                              <iframe
+                                src={`/api/report-card/${rc.id}/download?preview=1`}
+                                title={`Report card ${rc.term}`}
+                                className="h-[280px] w-full min-h-[200px] bg-white"
+                              />
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <a
+                                href={`/api/report-card/${rc.id}/download`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" x2="12" y1="15" y2="3" />
+                                </svg>
+                                Download PDF
+                              </a>
+                            </div>
+                            {rc.status === "draft" && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPublishPendingReportCardId(rc.id);
+                                  publishReportCardAction(rc.id).then(
+                                    (res) => {
+                                      setPublishPendingReportCardId(null);
+                                      if (res.success) router.refresh();
+                                      else if (res.error) alert(res.error);
+                                    }
+                                  );
+                                }}
+                                disabled={!!publishPendingReportCardId}
+                                className="mt-2 rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:opacity-50"
+                              >
+                                {publishPendingReportCardId === rc.id
+                                  ? "Publishing..."
+                                  : "Publish"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+          {addReportCardStudent && (
+            <AddReportCardModal
+              studentId={addReportCardStudent.id}
+              studentName={addReportCardStudent.name}
+              classTerm={addReportCardStudent.classTerm}
+              isOpen={true}
+              onClose={() => {
+                setAddReportCardStudent(null);
+                router.refresh();
+              }}
+            />
+          )}
+        </section>
+        )}
+
+        {/* Interviews tab */}
+        {activeTab === "interviews" && (
+        <section>
+          <h2 className="mb-4 text-lg font-medium text-zinc-900">
+            Parent-Teacher Interviews
+          </h2>
+          <p className="mb-4 text-sm text-zinc-600">
+            Add time slots for interviews. Parents can claim one slot per child.
+          </p>
+          {slotsByClass.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              No slots yet. Add slots from your classes below.
             </p>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              {slotsByClass.map(({ classId, className, slots }) => (
+                <div
+                  key={classId}
+                  className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-medium text-zinc-900">{className}</h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAddSlotsClass({ classId, className })
+                      }
+                      className="text-sm font-medium text-red-600 hover:text-red-700"
+                    >
+                      + Add slots
+                    </button>
+                  </div>
+                  {slots.length === 0 ? (
+                    <p className="text-sm text-zinc-500">
+                      No slots yet.
+                    </p>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-zinc-200">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-zinc-200 bg-zinc-50">
+                            <th className="px-3 py-2 text-left font-medium text-zinc-700">
+                              Time
+                            </th>
+                            <th className="px-3 py-2 text-left font-medium text-zinc-700">
+                              Status
+                            </th>
+                            <th className="px-3 py-2 text-right font-medium text-zinc-700">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {slots.map((s) => {
+                            const start = new Date(s.startAt);
+                            const end = new Date(s.endAt);
+                            const timeStr = `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} – ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+                            const dateStr = start.toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            });
+                            const cls = classes.find((c) => c.id === classId);
+                            const students = cls?.students ?? [];
+                            const studentIdsWithSlot = slots
+                              .filter((x) => x.studentId)
+                              .map((x) => x.studentId!);
+                            return (
+                              <tr
+                                key={s.id}
+                                className="border-b border-zinc-100 last:border-0"
+                              >
+                                <td className="px-3 py-2 font-medium text-zinc-900">
+                                  {dateStr} · {timeStr}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {s.isClaimed ? (
+                                    <span className="text-zinc-600">
+                                      <span className="text-zinc-500">
+                                        Parent:
+                                      </span>{" "}
+                                      {s.guardianName}
+                                      <span className="mx-1.5 text-zinc-400">
+                                        ·
+                                      </span>
+                                      <span className="text-zinc-500">
+                                        Student:
+                                      </span>{" "}
+                                      {s.studentName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-400">
+                                      Available
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <div className="relative flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenSlotMenuId(
+                                          openSlotMenuId === s.id ? null : s.id
+                                        )
+                                      }
+                                      className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                                      aria-label="Slot options"
+                                    >
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      >
+                                        <circle cx="12" cy="12" r="1" />
+                                        <circle cx="12" cy="5" r="1" />
+                                        <circle cx="12" cy="19" r="1" />
+                                      </svg>
+                                    </button>
+                                    {openSlotMenuId === s.id && (
+                                      <>
+                                        <div
+                                          className="fixed inset-0 z-10"
+                                          aria-hidden="true"
+                                          onClick={() =>
+                                            setOpenSlotMenuId(null)
+                                          }
+                                        />
+                                        <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                                          {s.isClaimed ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenSlotMenuId(null);
+                                                const prev = slotsByClass;
+                                                setSlotsByClass((arr) =>
+                                                  arr.map((c) =>
+                                                    c.classId !== classId
+                                                      ? c
+                                                      : {
+                                                          ...c,
+                                                          slots: c.slots.map(
+                                                            (slot) =>
+                                                              slot.id !== s.id
+                                                                ? slot
+                                                                : {
+                                                                    ...slot,
+                                                                    isClaimed: false,
+                                                                    studentId: undefined,
+                                                                    studentName: undefined,
+                                                                    guardianId: undefined,
+                                                                    guardianName: undefined,
+                                                                  }
+                                                          ),
+                                                        }
+                                                  )
+                                                );
+                                                setUnbookingSlotId(s.id);
+                                                unbookInterviewSlotAction(s.id).then(
+                                                  (res) => {
+                                                    setUnbookingSlotId(null);
+                                                    if (!res.success && res.error) {
+                                                      setSlotsByClass(prev);
+                                                      alert(res.error);
+                                                    }
+                                                  }
+                                                );
+                                              }}
+                                              disabled={unbookingSlotId !== null}
+                                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                                            >
+                                              {unbookingSlotId === s.id
+                                                ? "Freeing..."
+                                                : "Free slot"}
+                                            </button>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenSlotMenuId(null);
+                                                setBookSlotFor({
+                                                  slot: s,
+                                                  classId,
+                                                  className,
+                                                  studentIdsWithSlot,
+                                                });
+                                              }}
+                                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                                            >
+                                              Book for parent
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenSlotMenuId(null);
+                                              if (
+                                                !confirm(
+                                                  "Remove this time slot? This cannot be undone."
+                                                )
+                                              )
+                                                return;
+                                              const prev = slotsByClass;
+                                              setSlotsByClass((arr) =>
+                                                arr.map((c) =>
+                                                  c.classId !== classId
+                                                    ? c
+                                                    : {
+                                                        ...c,
+                                                        slots: c.slots.filter(
+                                                          (slot) => slot.id !== s.id
+                                                        ),
+                                                      }
+                                                )
+                                              );
+                                              setDeletingSlotId(s.id);
+                                              deleteInterviewSlotAction(s.id).then(
+                                                (res) => {
+                                                  setDeletingSlotId(null);
+                                                  if (!res.success && res.error) {
+                                                    setSlotsByClass(prev);
+                                                    alert(res.error);
+                                                  }
+                                                }
+                                              );
+                                            }}
+                                            disabled={deletingSlotId !== null}
+                                            className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                          >
+                                            {deletingSlotId === s.id
+                                              ? "Removing..."
+                                              : "Remove slot"}
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {slotsByClass.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-medium text-zinc-700">
+                Add slots to a class
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {classes.map((cls) => (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() =>
+                      setAddSlotsClass({
+                        classId: cls.id,
+                        className: cls.name,
+                      })
+                    }
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    + {cls.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {addSlotsClass && (
+            <AddInterviewSlotsModal
+              classId={addSlotsClass.classId}
+              className={addSlotsClass.className}
+              isOpen={true}
+              onClose={() => {
+                setAddSlotsClass(null);
+                router.refresh();
+              }}
+            />
+          )}
+          {bookSlotFor && (
+            <BookSlotModal
+              slot={bookSlotFor.slot}
+              className={bookSlotFor.className}
+              students={
+                classes.find((c) => c.id === bookSlotFor.classId)?.students ??
+                []
+              }
+              studentIdsWithSlot={bookSlotFor.studentIdsWithSlot}
+              isOpen={true}
+              onClose={() => setBookSlotFor(null)}
+              onSuccess={(slotId, studentId, studentName, guardianName) => {
+                const { classId } = bookSlotFor;
+                setSlotsByClass((arr) =>
+                  arr.map((c) =>
+                    c.classId !== classId
+                      ? c
+                      : {
+                          ...c,
+                          slots: c.slots.map((slot) =>
+                            slot.id !== slotId
+                              ? slot
+                              : {
+                                  ...slot,
+                                  isClaimed: true,
+                                  studentId,
+                                  studentName,
+                                  guardianName,
+                                }
+                          ),
+                        }
+                  )
+                );
+              }}
+            />
+          )}
         </section>
         )}
 
@@ -1309,9 +2128,30 @@ export function TeacherDashboard({
                           students={status.students}
                           eventCost={event.cost ?? 0}
                           onMarkCashReceived={async (slipId, received) => {
-                            const { success } =
+                            const prev = permissionSlipStatusState;
+                            setPermissionSlipStatusState((arr) =>
+                              arr.map((ev) =>
+                                ev.eventId !== event.id
+                                  ? ev
+                                  : {
+                                      ...ev,
+                                      students: ev.students.map((stu) =>
+                                        stu.slipId !== slipId
+                                          ? stu
+                                          : {
+                                              ...stu,
+                                              cashReceived: received,
+                                            }
+                                      ),
+                                    }
+                              )
+                            );
+                            const { success, error } =
                               await markCashReceivedAction(slipId, received);
-                            if (success) router.refresh();
+                            if (!success && error) {
+                              setPermissionSlipStatusState(prev);
+                              alert(error);
+                            }
                           }}
                           onRowClick={setSelectedSubmissionStudent}
                         />

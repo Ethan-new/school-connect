@@ -24,26 +24,30 @@ export default async function CreateClassPage() {
   const hasClass = await teacherHasClass(session.user.sub);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-center gap-10 px-6 py-16 sm:px-16">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center">
-          <h1 className="text-3xl font-semibold leading-tight tracking-tight text-black dark:text-zinc-50">
-            {hasClass ? "Create another class" : "Create your first class"}
-          </h1>
-          <p className="max-w-sm text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
-            Set up your classroom and get a code to share with parents.
-          </p>
+    <div className="min-h-screen bg-zinc-50 font-sans">
+      <div className="mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center px-4 py-16 sm:px-6">
+        <div className="w-full max-w-sm overflow-hidden rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
+          <div className="flex flex-col items-center">
+            <Image
+              src="/logo_yrdsb_desktop.svg"
+              alt="York Region District School Board"
+              width={160}
+              height={50}
+              className="mb-6 h-10 w-auto"
+              priority
+            />
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
+              {hasClass ? "Create another class" : "Create your first class"}
+            </h1>
+            <p className="mt-2 text-center text-sm text-zinc-600">
+              Set up your classroom and get a code to share with parents.
+            </p>
+            <div className="mt-8 w-full">
+              <CreateClassForm />
+            </div>
+          </div>
         </div>
-        <CreateClassForm />
-      </main>
+      </div>
     </div>
   );
 }

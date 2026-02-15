@@ -1,13 +1,12 @@
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { getDbUser } from "@/lib/sync-user";
 import { parentHasJoinedClass } from "@/lib/class-code";
 import { isDbConfigured } from "@/lib/db";
-import { ClassCodeForm } from "./class-code-form";
+import { ParentNameForm } from "./parent-name-form";
 
-export default async function ClassCodePage() {
+export default async function ParentNamePage() {
   const session = await auth0.getSession();
   if (!session) {
     redirect("/auth/login");
@@ -21,8 +20,9 @@ export default async function ClassCodePage() {
   if (!dbUser?.roleSelectedAt || dbUser.role !== "parent") {
     redirect("/onboarding");
   }
-  if (!dbUser.parentNameSetAt) {
-    redirect("/onboarding/parent-name");
+  if (dbUser.parentNameSetAt) {
+    const hasJoined = await parentHasJoinedClass(session.user.sub);
+    redirect(hasJoined ? "/" : "/onboarding/class-code");
   }
 
   const hasJoinedClass = await parentHasJoinedClass(session.user.sub);
@@ -41,24 +41,18 @@ export default async function ClassCodePage() {
               priority
             />
             <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
-              {hasJoinedClass ? "Add another class" : "Enter your class code"}
+              What&apos;s your name?
             </h1>
             <p className="mt-2 text-center text-sm text-zinc-600">
-              {hasJoinedClass
-                ? "Enter a class code to connect to another classroom."
-                : "Ask your child's teacher for the class code to connect to their classroom."}
+              We&apos;ll use this so teachers can identify you when you connect
+              to their classes.
             </p>
             <div className="mt-8 w-full">
-              <ClassCodeForm />
+              <ParentNameForm
+                initialName={dbUser.name}
+                redirectTo={hasJoinedClass ? "/" : "/onboarding/class-code"}
+              />
             </div>
-            {hasJoinedClass && (
-              <Link
-                href="/"
-                className="mt-4 text-sm font-medium text-zinc-600 hover:text-zinc-900"
-              >
-                ← Back to dashboard
-              </Link>
-            )}
           </div>
         </div>
       </div>

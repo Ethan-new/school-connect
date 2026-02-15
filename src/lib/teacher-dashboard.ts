@@ -13,6 +13,16 @@ import {
   type EventPermissionStatus,
 } from "./event-permission-slips";
 import { getEventEffectiveCost } from "./calendar-events";
+import { getReportCardsForTeacher } from "./report-cards";
+import type { ReportCardSerialized } from "./report-cards";
+import { getInterviewSlotsForTeacher } from "./interview-slots";
+import type { InterviewSlotSerialized } from "./interview-slots";
+import {
+  getStudentsWithGuardiansForTeacher,
+  getConversationSummariesForTeacher,
+} from "./messaging";
+import type { StudentWithGuardians } from "./messaging";
+export type { StudentWithGuardians };
 
 export interface TeacherClassWithSchool extends Class {
   schoolName: string;
@@ -64,6 +74,12 @@ export interface CalendarEventSerialized {
   costPerOccurrence?: number;
 }
 
+export interface TeacherInterviewClass {
+  classId: string;
+  className: string;
+  slots: InterviewSlotSerialized[];
+}
+
 export interface TeacherDashboardData {
   classes: TeacherClassSerialized[];
   upcomingEvents: CalendarEventSerialized[];
@@ -71,6 +87,10 @@ export interface TeacherDashboardData {
   permissionSlipEvents: CalendarEventSerialized[];
   /** Per-event permission slip status by student */
   permissionSlipStatus: EventPermissionStatus[];
+  reportCards: ReportCardSerialized[];
+  interviewSlotsByClass: TeacherInterviewClass[];
+  studentsWithGuardians: StudentWithGuardians[];
+  conversationSummaries: Record<string, { conversationId: string; lastMessageAt: string; lastMessagePreview: string | null; messageCount: number }>;
 }
 
 /**
@@ -284,15 +304,29 @@ export async function getTeacherDashboardData(
     )
     .map((e) => e._id?.toString())
     .filter((id): id is string => Boolean(id));
-  const permissionSlipStatus =
-    permissionSlipEventIds.length > 0
-      ? await getEventPermissionSlipStatus(permissionSlipEventIds)
-      : [];
+  const studentsWithGuardians = await getStudentsWithGuardiansForTeacher(
+    auth0Id
+  );
+  const [permissionSlipStatus, reportCards, interviewSlotsByClass, convSummaries] =
+    await Promise.all([
+      permissionSlipEventIds.length > 0
+        ? getEventPermissionSlipStatus(permissionSlipEventIds)
+        : Promise.resolve([]),
+      getReportCardsForTeacher(auth0Id),
+      getInterviewSlotsForTeacher(auth0Id),
+      getConversationSummariesForTeacher(auth0Id, studentsWithGuardians),
+    ]);
+
+  const conversationSummaries = Object.fromEntries(convSummaries);
 
   return {
     classes: classesSerialized,
     upcomingEvents: upcomingEvents.map(serializeEvent),
     permissionSlipEvents: upcomingEvents.map(serializeEvent),
     permissionSlipStatus,
+    reportCards,
+    interviewSlotsByClass,
+    studentsWithGuardians,
+    conversationSummaries,
   };
 }

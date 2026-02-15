@@ -19,6 +19,25 @@ import {
   linkGuardianToStudent,
   unlinkGuardianFromStudent,
 } from "@/lib/class-students";
+import {
+  getReportCardsForStudent,
+  createReportCard,
+  updateReportCardPdf,
+  publishReportCard,
+} from "@/lib/report-cards";
+import {
+  createInterviewSlots,
+  claimInterviewSlot,
+  unclaimInterviewSlot,
+  deleteInterviewSlot,
+  bookInterviewSlotManually,
+  unbookInterviewSlot,
+} from "@/lib/interview-slots";
+import {
+  getOrCreateConversation,
+  getMessages,
+  sendMessage,
+} from "@/lib/messaging";
 import type { CalendarEventVisibility } from "@/lib/db/types";
 
 export async function createEventAction(input: {
@@ -317,4 +336,228 @@ export async function unlinkGuardianAction(
   return result.success
     ? { success: true }
     : { success: false, error: result.error };
+}
+
+// --- Report cards ---
+
+export async function getReportCardsAction(
+  studentId: string
+): Promise<
+  { success: true; reportCards: Awaited<ReturnType<typeof getReportCardsForStudent>> } | { success: false; error?: string }
+> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const reportCards = await getReportCardsForStudent(
+    session.user.sub,
+    studentId
+  );
+  return { success: true, reportCards };
+}
+
+export async function createReportCardAction(
+  formData: FormData
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const studentId = formData.get("studentId") as string | null;
+  const term = formData.get("term") as string | null;
+  const file = formData.get("pdf") as File | null;
+
+  if (!studentId || !term?.trim()) {
+    return { success: false, error: "Student and term are required" };
+  }
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return { success: false, error: "Please select a PDF file" };
+  }
+  if (file.type !== "application/pdf") {
+    return { success: false, error: "File must be a PDF" };
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, error: "File must be under 5MB" };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const pdfBase64 = Buffer.from(buffer).toString("base64");
+
+  const result = await createReportCard(session.user.sub, {
+    studentId,
+    term: term.trim(),
+    pdfBase64,
+  });
+  return result.success
+    ? { success: true, id: result.id }
+    : { success: false, error: result.error };
+}
+
+export async function updateReportCardPdfAction(
+  reportCardId: string,
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const file = formData.get("pdf") as File | null;
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return { success: false, error: "Please select a PDF file" };
+  }
+  if (file.type !== "application/pdf") {
+    return { success: false, error: "File must be a PDF" };
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, error: "File must be under 5MB" };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const pdfBase64 = Buffer.from(buffer).toString("base64");
+
+  return updateReportCardPdf(session.user.sub, reportCardId, pdfBase64);
+}
+
+export async function publishReportCardAction(
+  reportCardId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  return publishReportCard(session.user.sub, reportCardId);
+}
+
+// --- Interview slots ---
+
+export async function createInterviewSlotsAction(
+  classId: string,
+  slots: { startAt: string; endAt: string }[]
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const result = await createInterviewSlots(
+    session.user.sub,
+    classId,
+    slots
+  );
+  return result.success
+    ? { success: true, count: result.count }
+    : { success: false, error: result.error };
+}
+
+export async function claimInterviewSlotAction(
+  slotId: string,
+  studentId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  return claimInterviewSlot(session.user.sub, slotId, studentId);
+}
+
+export async function unclaimInterviewSlotAction(
+  slotId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  return unclaimInterviewSlot(session.user.sub, slotId);
+}
+
+export async function deleteInterviewSlotAction(
+  slotId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return deleteInterviewSlot(session.user.sub, slotId);
+}
+
+export async function bookInterviewSlotManuallyAction(
+  slotId: string,
+  studentId: string,
+  parentName: string,
+  parentEmail?: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return bookInterviewSlotManually(
+    session.user.sub,
+    slotId,
+    studentId,
+    parentName,
+    parentEmail ?? ""
+  );
+}
+
+export async function unbookInterviewSlotAction(
+  slotId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return unbookInterviewSlot(session.user.sub, slotId);
+}
+
+// --- Messaging ---
+
+export async function getOrCreateConversationAction(
+  guardianId: string,
+  studentId: string,
+  schoolId: string
+): Promise<
+  | { success: true; conversationId: string }
+  | { success: false; error: string }
+> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return getOrCreateConversation(
+    session.user.sub,
+    guardianId,
+    studentId,
+    schoolId
+  );
+}
+
+export async function getMessagesAction(
+  conversationId: string
+): Promise<{ success: true; messages: import("@/lib/messaging").MessageSerialized[] } | { success: false; error: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  const messages = await getMessages(session.user.sub, conversationId);
+  return { success: true, messages };
+}
+
+export async function sendMessageAction(
+  conversationId: string,
+  body: string
+): Promise<
+  | { success: true; messageId: string }
+  | { success: false; error: string }
+> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return sendMessage(session.user.sub, conversationId, body);
 }
