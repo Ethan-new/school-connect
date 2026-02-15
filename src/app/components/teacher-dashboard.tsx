@@ -1392,17 +1392,31 @@ export function TeacherDashboard({
                     classes.find((c) =>
                       c.studentIds?.includes(swg.studentId)
                     )?.schoolId ?? "";
+                  const onClick = () => {
+                    const student = {
+                      studentId: swg.studentId,
+                      studentName: swg.studentName,
+                      schoolId,
+                    };
+                    setSelectedMessageStudent(student);
+                    if (guardianCount === 1) {
+                      const g = swg.guardians[0];
+                      const key = `${g.guardianId}:${swg.studentId}`;
+                      const sum = conversationSummaries[key];
+                      setSelectedMessageGuardian({
+                        guardianId: g.guardianId,
+                        guardianName: g.guardianName,
+                        conversationId: sum?.conversationId ?? null,
+                      });
+                    } else {
+                      setSelectedMessageGuardian(null);
+                    }
+                  };
                   return (
                     <li key={swg.studentId}>
                       <button
                         type="button"
-                        onClick={() =>
-                          setSelectedMessageStudent({
-                            studentId: swg.studentId,
-                            studentName: swg.studentName,
-                            schoolId,
-                          })
-                        }
+                        onClick={onClick}
                         className="grid w-full grid-cols-[1fr_7.5rem_2rem] items-center gap-4 px-4 py-3 text-left hover:bg-zinc-50"
                       >
                         <span className="min-w-0 truncate font-medium text-zinc-900">

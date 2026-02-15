@@ -23,18 +23,24 @@ export function AddInterviewSlotsModal({
   onClose,
 }: AddInterviewSlotsModalProps) {
   const [date, setDate] = useState(getDefaultInterviewDate);
-  const [times, setTimes] = useState<string[]>(["15:00"]);
+  const [times, setTimes] = useState<string[]>([]);
   const [slotDuration, setSlotDuration] = useState(15);
   const [bufferMinutes, setBufferMinutes] = useState(0);
   const [bulkCount, setBulkCount] = useState(10);
-  const [bulkStartTime, setBulkStartTime] = useState("15:00");
+  const [bulkStartTime, setBulkStartTime] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  /** Track quick-add groups so we can respace them when buffer changes */
+  const [bulkAddGroups, setBulkAddGroups] = useState<
+    { startTime: string; count: number; startIndex: number }[]
+  >([]);
 
   function handleClose() {
     if (!isPending) {
       setDate(getDefaultInterviewDate());
-      setTimes(["15:00"]);
+      setTimes([]);
+      setBulkStartTime("");
+      setBulkAddGroups([]);
       setError(null);
       onClose();
     }
@@ -45,6 +51,40 @@ export function AddInterviewSlotsModal({
       setDate(getDefaultInterviewDate());
     }
   }, [isOpen]);
+
+  /** When buffer or duration changes, respace all quick-add slots to include the new buffer */
+  useEffect(() => {
+    if (bulkAddGroups.length === 0) return;
+    const duration = Math.max(5, Math.min(60, slotDuration));
+    const intervalMinutes = duration + bufferMinutes;
+    if (intervalMinutes < 5) return;
+
+    setTimes((prev) => {
+      let result = [...prev];
+      for (const group of bulkAddGroups) {
+        const { startTime, count, startIndex } = group;
+        const [h, m] = startTime.split(":").map(Number);
+        if (isNaN(h) || isNaN(m)) continue;
+        const newTimes: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const totalMins = h * 60 + m + i * intervalMinutes;
+          const nh = Math.floor(totalMins / 60) % 24;
+          const nm = totalMins % 60;
+          newTimes.push(
+            `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`
+          );
+        }
+        result = [
+          ...result.slice(0, startIndex),
+          ...newTimes,
+          ...result.slice(startIndex + count),
+        ];
+      }
+      return result;
+    });
+    // Only run when buffer/duration changes; bulkAddGroups read from closure
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bufferMinutes, slotDuration]);
 
   function timeToMinutes(t: string): number {
     const [h, m] = t.split(":").map(Number);
@@ -73,7 +113,7 @@ export function AddInterviewSlotsModal({
 
   function addTime() {
     const duration = Math.max(5, Math.min(60, slotDuration));
-    const suggested = times.length > 0 ? times[times.length - 1] : "15:00";
+    const suggested = times.length > 0 ? times[times.length - 1] : "09:00";
     const [h, m] = suggested.split(":").map(Number);
     const nextMins = (h * 60 + m) + duration + bufferMinutes;
     const nextTime = `${String(Math.floor(nextMins / 60) % 24).padStart(2, "0")}:${String(nextMins % 60).padStart(2, "0")}`;
@@ -106,19 +146,25 @@ export function AddInterviewSlotsModal({
         skipped++;
       }
     }
+    const addedCount = newTimes.length;
+    const startIndex = times.length;
+    setBulkAddGroups((groups) => [
+      ...groups,
+      { startTime, count: addedCount, startIndex },
+    ]);
     setTimes((prev) => [...prev, ...newTimes]);
     setError(
       skipped > 0
-        ? `Added ${newTimes.length} slots. Skipped ${skipped} that would overlap.`
+        ? `Added ${addedCount} slots. Skipped ${skipped} that would overlap.`
         : null
     );
-    if (newTimes.length === 0 && skipped > 0) {
+    if (addedCount === 0 && skipped > 0) {
       setError("All slots would overlap with existing ones. Choose a different start time.");
     }
   }
 
   function removeTime(idx: number) {
-    if (times.length <= 1) return;
+    setBulkAddGroups([]);
     setTimes((t) => t.filter((_, i) => i !== idx));
   }
 
@@ -131,6 +177,7 @@ export function AddInterviewSlotsModal({
       return;
     }
     setError(null);
+    setBulkAddGroups([]);
     setTimes((t) => t.map((v, i) => (i === idx ? value : v)));
   }
 
@@ -297,7 +344,7 @@ export function AddInterviewSlotsModal({
               <button
                 type="button"
                 onClick={() => addBulkSlots(bulkCount, bulkStartTime)}
-                disabled={isPending}
+                disabled={isPending || !bulkStartTime}
                 className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-300 disabled:opacity-50"
               >
                 Add
@@ -319,6 +366,11 @@ export function AddInterviewSlotsModal({
               </button>
             </div>
             <div className="space-y-2">
+              {times.length === 0 && (
+                <p className="text-sm text-zinc-500">
+                  No slots yet. Click &quot;+ Add one&quot; or use Quick add above.
+                </p>
+              )}
               {times.map((t, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <input
@@ -331,7 +383,7 @@ export function AddInterviewSlotsModal({
                   <button
                     type="button"
                     onClick={() => removeTime(idx)}
-                    disabled={isPending || times.length <= 1}
+                    disabled={isPending}
                     className="rounded p-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 disabled:opacity-50"
                     aria-label="Remove"
                   >

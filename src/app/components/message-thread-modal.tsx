@@ -60,9 +60,12 @@ export function MessageThreadModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    setConversationId(existingConversationId);
+    setMessages([]);
+    setError(null);
+
     async function open() {
       setLoading(true);
-      setError(null);
       try {
         let convId = existingConversationId;
         if (!convId) {
@@ -102,18 +105,31 @@ export function MessageThreadModal({
     const body = input.trim();
     if (!body || !conversationId || sending) return;
 
+    const optimisticId = `temp-${Date.now()}`;
+    const optimisticMessage: MessageSerialized = {
+      id: optimisticId,
+      conversationId,
+      senderId: "",
+      body,
+      createdAt: new Date().toISOString(),
+      isFromTeacher: true,
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setInput("");
     setSending(true);
     setError(null);
+
     const res = await sendMessageAction(conversationId, body);
     setSending(false);
     if (res.success) {
-      setInput("");
-      const msgsRes = await getMessagesAction(conversationId);
-      if (msgsRes.success) {
-        setMessages(msgsRes.messages);
-      }
-    } else if (res.error) {
-      setError(res.error);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === optimisticId ? { ...m, id: res.messageId } : m
+        )
+      );
+    } else {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setError(res.error ?? "Failed to send");
     }
   }
 
@@ -161,7 +177,7 @@ export function MessageThreadModal({
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-4"
         >
-          {loading ? (
+          {loading && messages.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-500">
               Loading...
             </p>
@@ -215,12 +231,13 @@ export function MessageThreadModal({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
-              disabled={loading || !conversationId || sending}
+              disabled={sending}
               className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 disabled:opacity-50 [color-scheme:light]"
+              autoFocus
             />
             <button
               type="submit"
-              disabled={loading || !input.trim() || !conversationId || sending}
+              disabled={!input.trim() || !conversationId || sending}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
             >
               {sending ? "Sending..." : "Send"}
