@@ -503,15 +503,24 @@ export function ParentDashboard({
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
           <div className="flex items-center gap-6 border-b border-zinc-200 pb-2">
-            <Link href="/" className="flex shrink-0 items-center">
+            <div className="flex shrink-0 items-center gap-4">
+              <Link href="/" className="flex items-center">
+                <Image
+                  src="/school_connect.png"
+                  alt="School Connect"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 object-contain"
+                />
+              </Link>
               <Image
                 src="/logo_yrdsb_desktop.svg"
                 alt="York Region District School Board"
                 width={140}
                 height={44}
-                className="h-8 w-auto"
+                className="h-9 w-auto"
               />
-            </Link>
+            </div>
             <nav className="flex flex-1 items-center gap-6">
             <button
               type="button"
