@@ -100,6 +100,8 @@ export interface CalendarEvent {
   costPerOccurrence?: number;
   /** Teacher-uploaded permission form PDF (base64). Required for parents to download and sign. */
   permissionFormPdfBase64?: string;
+  /** Due date for form and payment (YYYY-MM-DD). When set, parents must submit by this date. */
+  permissionSlipDueDate?: string;
   createdAt?: Date;
 }
 

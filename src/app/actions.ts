@@ -30,6 +30,7 @@ import {
   claimInterviewSlot,
   unclaimInterviewSlot,
   deleteInterviewSlot,
+  deleteAllInterviewSlotsForClass,
   bookInterviewSlotManually,
   unbookInterviewSlot,
 } from "@/lib/interview-slots";
@@ -52,7 +53,8 @@ export async function createEventAction(input: {
   cost?: number;
   costPerOccurrence?: number;
   occurrenceDates?: string[];
-}): Promise<{ success: boolean; error?: string }> {
+  permissionSlipDueDate?: string;
+}): Promise<{ success: boolean; eventId?: string; error?: string }> {
   const session = await auth0.getSession();
   if (!session?.user?.sub) {
     return { success: false, error: "Not authenticated" };
@@ -60,7 +62,7 @@ export async function createEventAction(input: {
 
   const result = await createCalendarEvent(session.user.sub, input);
   return result.success
-    ? { success: true }
+    ? { success: true, eventId: result.eventId }
     : { success: false, error: result.error };
 }
 
@@ -75,6 +77,7 @@ export async function updateEventAction(
     cost?: number | null;
     costPerOccurrence?: number | null;
     occurrenceDates?: string[] | null;
+    permissionSlipDueDate?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const session = await auth0.getSession();
@@ -484,6 +487,16 @@ export async function deleteInterviewSlotAction(
     return { success: false, error: "Not authenticated" };
   }
   return deleteInterviewSlot(session.user.sub, slotId);
+}
+
+export async function deleteAllInterviewSlotsForClassAction(
+  classId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+  return deleteAllInterviewSlotsForClass(session.user.sub, classId);
 }
 
 export async function bookInterviewSlotManuallyAction(

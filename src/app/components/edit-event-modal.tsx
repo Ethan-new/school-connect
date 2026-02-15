@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { updateEventAction } from "@/app/actions";
+import { updateEventAction, uploadEventPermissionFormAction } from "@/app/actions";
 import type { CalendarEventSerialized } from "@/lib/teacher-dashboard";
 
 interface EditEventModalProps {
@@ -39,6 +39,10 @@ export function EditEventModal({
   const [costPerOccurrence, setCostPerOccurrence] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [isUploadingForm, setIsUploadingForm] = useState(false);
+  const [hasPermissionForm, setHasPermissionForm] = useState(false);
+  const [hasSeparateDueDate, setHasSeparateDueDate] = useState(false);
+  const [permissionSlipDueDate, setPermissionSlipDueDate] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -65,6 +69,9 @@ export function EditEventModal({
           ? String(event.costPerOccurrence)
           : ""
       );
+      setHasPermissionForm(event.hasPermissionForm ?? false);
+      setHasSeparateDueDate(Boolean(event.permissionSlipDueDate));
+      setPermissionSlipDueDate(event.permissionSlipDueDate ?? start.date);
       setError(null);
     }
   }, [isOpen, event]);
@@ -80,8 +87,53 @@ export function EditEventModal({
     setOccurrenceDates(occurrenceDates.filter((x) => x !== d));
   }
 
+  /** Add minutes to HH:mm time string */
+  function addMinutesToTime(time: string, minutes: number): string {
+    const [h, m] = time.split(":").map(Number);
+    const totalMins = h * 60 + m + minutes;
+    const newH = Math.floor(totalMins / 60) % 24;
+    const newM = totalMins % 60;
+    return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+  }
+
+  /** True if timeA is strictly before timeB (HH:mm) */
+  function isTimeBefore(timeA: string, timeB: string): boolean {
+    const [ha, ma] = timeA.split(":").map(Number);
+    const [hb, mb] = timeB.split(":").map(Number);
+    return ha < hb || (ha === hb && ma < mb);
+  }
+
+  function handleStartTimeChange(newStartTime: string) {
+    setStartTime(newStartTime);
+    if (!isTimeBefore(newStartTime, endTime)) {
+      setEndTime(addMinutesToTime(newStartTime, 60));
+    }
+  }
+
+  async function handleUploadForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!event) return;
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    if (!formData.get("pdf") || (formData.get("pdf") as File).size === 0) {
+      setError("Please select a PDF file");
+      return;
+    }
+    setIsUploadingForm(true);
+    setError(null);
+    const { success, error: err } = await uploadEventPermissionFormAction(event.id, formData);
+    setIsUploadingForm(false);
+    if (success) {
+      form.reset();
+      setHasPermissionForm(true);
+      router.refresh();
+    } else if (err) {
+      setError(err);
+    }
+  }
+
   function handleClose() {
-    if (!isPending) {
+    if (!isPending && !isUploadingForm) {
       onClose();
     }
   }
@@ -93,6 +145,15 @@ export function EditEventModal({
 
     if (isRecurring && occurrenceDates.length < 2) {
       setError("Recurring events need at least 2 dates");
+      return;
+    }
+
+    const startBeforeEnd =
+      isRecurring
+        ? isTimeBefore(startTime, endTime)
+        : startDate < endDate || (startDate === endDate && isTimeBefore(startTime, endTime));
+    if (!startBeforeEnd) {
+      setError("End time must be after start time");
       return;
     }
 
@@ -132,6 +193,7 @@ export function EditEventModal({
       startAt,
       endAt,
       requiresPermissionSlip,
+      permissionSlipDueDate: (requiresPermissionSlip || costNum != null || costPerOccNum != null) && hasSeparateDueDate ? (permissionSlipDueDate || null) : null,
     };
     if (isRecurring) {
       updatePayload.costPerOccurrence = costPerOccNum ?? null;
@@ -227,18 +289,104 @@ export function EditEventModal({
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-50"
             />
           </div>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={requiresPermissionSlip}
-              onChange={(e) => setRequiresPermissionSlip(e.target.checked)}
-              disabled={isPending}
-              className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
-            />
-            <span className="text-sm text-zinc-700">
-              Requires permission slip
-            </span>
-          </label>
+          <div className="space-y-1">
+            <label
+              htmlFor="edit-event-requires-permission-slip"
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <input
+                id="edit-event-requires-permission-slip"
+                type="checkbox"
+                name="requiresPermissionSlip"
+                checked={requiresPermissionSlip}
+                onChange={(e) => setRequiresPermissionSlip(e.target.checked)}
+                disabled={isPending}
+                className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
+              />
+              <span className="text-sm text-zinc-700">
+                Requires permission slip
+              </span>
+            </label>
+            {requiresPermissionSlip && (
+              <>
+                <p className="text-xs text-zinc-500">
+                  Parents will need to sign a permission form for this event.
+                </p>
+                <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4">
+                  <h3 className="text-sm font-semibold text-zinc-800">
+                    Permission form PDF
+                  </h3>
+                  {hasPermissionForm ? (
+                    <p className="mt-1 text-sm text-emerald-600">
+                      Form uploaded ✓
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-amber-600">
+                      No form uploaded — upload a PDF for parents to sign
+                    </p>
+                  )}
+                  <form
+                    onSubmit={handleUploadForm}
+                    className="mt-3 flex flex-wrap items-center gap-2"
+                  >
+                    <input
+                      type="file"
+                      name="pdf"
+                      accept=".pdf,application/pdf"
+                      disabled={isUploadingForm || isPending}
+                      className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isUploadingForm || isPending}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {isUploadingForm ? "Uploading..." : hasPermissionForm ? "Replace form" : "Upload form"}
+                    </button>
+                  </form>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Parents will download this PDF to sign and return.
+                  </p>
+                </div>
+              </>
+            )}
+            {(requiresPermissionSlip || (isRecurring ? (costPerOccurrence && parseFloat(costPerOccurrence) > 0) : (cost && parseFloat(cost) > 0))) && (
+              <div className="mt-3 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={hasSeparateDueDate}
+                    onChange={(e) => {
+                      setHasSeparateDueDate(e.target.checked);
+                      if (e.target.checked && !permissionSlipDueDate) {
+                        setPermissionSlipDueDate(isRecurring && occurrenceDates.length > 0 ? occurrenceDates[0] : startDate);
+                      }
+                    }}
+                    disabled={isPending}
+                    className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
+                  />
+                  <span className="text-sm font-medium text-zinc-700">
+                    Separate due date for parents to sign and submit payment
+                  </span>
+                </label>
+                {hasSeparateDueDate && (
+                  <div>
+                    <label htmlFor="edit-event-due-date" className="mb-1 block text-sm font-medium text-zinc-700">
+                      Due date
+                    </label>
+                    <input
+                      id="edit-event-due-date"
+                      type="date"
+                      value={permissionSlipDueDate}
+                      onChange={(e) => setPermissionSlipDueDate(e.target.value)}
+                      disabled={isPending}
+                      className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -306,36 +454,34 @@ export function EditEventModal({
               </p>
             </div>
           )}
-          {requiresPermissionSlip && (
-            <div>
-              <label
-                htmlFor="edit-event-cost"
-                className="mb-1 block text-sm font-medium text-zinc-700"
-              >
-                {isRecurring ? "Cost per occurrence ($)" : "Cost ($)"}
-              </label>
-              <input
-                id="edit-event-cost"
-                type="number"
-                min="0"
-                step="0.01"
-                value={isRecurring ? costPerOccurrence : cost}
-                onChange={(e) =>
-                  isRecurring
-                    ? setCostPerOccurrence(e.target.value)
-                    : setCost(e.target.value)
-                }
-                placeholder={isRecurring ? "e.g. 5.00" : "e.g. 10.50"}
-                disabled={isPending}
-                className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-50"
-              />
-              {isRecurring && occurrenceDates.length > 0 && costPerOccurrence && !Number.isNaN(parseFloat(costPerOccurrence)) && (
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  Total: ${(parseFloat(costPerOccurrence) * occurrenceDates.length).toFixed(2)} ({occurrenceDates.length} dates × ${parseFloat(costPerOccurrence).toFixed(2)})
-                </p>
-              )}
-            </div>
-          )}
+          <div>
+            <label
+              htmlFor="edit-event-cost"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
+              {isRecurring ? "Cost per occurrence ($)" : "Cost ($)"}
+            </label>
+            <input
+              id="edit-event-cost"
+              type="number"
+              min="0"
+              step="0.01"
+              value={isRecurring ? costPerOccurrence : cost}
+              onChange={(e) =>
+                isRecurring
+                  ? setCostPerOccurrence(e.target.value)
+                  : setCost(e.target.value)
+              }
+              placeholder={isRecurring ? "e.g. 5.00 or 0 for free" : "e.g. 10.50 or 0 for free"}
+              disabled={isPending}
+              className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-50"
+            />
+            {isRecurring && occurrenceDates.length > 0 && costPerOccurrence && !Number.isNaN(parseFloat(costPerOccurrence)) && parseFloat(costPerOccurrence) > 0 && (
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Total: ${(parseFloat(costPerOccurrence) * occurrenceDates.length).toFixed(2)} ({occurrenceDates.length} dates × ${parseFloat(costPerOccurrence).toFixed(2)})
+              </p>
+            )}
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">
               {isRecurring ? "Start time (each date)" : "Start"}
@@ -354,7 +500,7 @@ export function EditEventModal({
               <input
                 type="time"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={(e) => handleStartTimeChange(e.target.value)}
                 required
                 disabled={isPending}
                 className={`rounded-lg border border-zinc-300 bg-white px-3 text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-50 ${isRecurring ? "h-10 w-32" : "h-10 w-24"}`}

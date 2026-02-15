@@ -32,6 +32,7 @@ import { AddInterviewSlotsModal } from "./add-interview-slots-modal";
 import { BookSlotModal } from "./book-slot-modal";
 import {
   deleteInterviewSlotAction,
+  deleteAllInterviewSlotsForClassAction,
   unbookInterviewSlotAction,
 } from "@/app/actions";
 import { MessageThreadModal } from "./message-thread-modal";
@@ -86,15 +87,14 @@ function formatEventTimeRange(startIso: string, endIso: string): string {
     day: "numeric",
     year: "numeric",
   });
-  const startTime = start.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const endTime = end.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${dateStr} · ${startTime} – ${endTime}`;
+  const isAllDay =
+    start.getHours() === 0 &&
+    start.getMinutes() === 0 &&
+    (end.getHours() === 23 || (end.getHours() === 0 && end.getMinutes() === 0 && end.getDate() > start.getDate()));
+  const timeStr = isAllDay
+    ? "All day"
+    : `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} – ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  return `${dateStr} · ${timeStr}`;
 }
 
 function formatOccurrenceDates(dates: string[]): string {
@@ -120,17 +120,47 @@ function formatOccurrenceDates(dates: string[]): string {
 
 function TeacherCalendarView({
   events,
+  classes,
   onEventClick,
-  onAddEvent,
 }: {
   events: CalendarEventSerialized[];
+  classes: { id: string; name: string }[];
   onEventClick: (eventId: string) => void;
-  onAddEvent: () => void;
 }) {
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+  const [classFilterOpen, setClassFilterOpen] = useState(false);
+  const [selectedClassIds, setSelectedClassIds] = useState<Set<string> | null>(null);
+
+  const filteredEvents =
+    selectedClassIds === null || selectedClassIds.size === 0
+      ? events
+      : events.filter(
+          (e) => !e.classId || selectedClassIds.has(e.classId)
+        );
+
+  const selectedCount =
+    selectedClassIds === null || selectedClassIds.size === 0
+      ? classes.length
+      : selectedClassIds.size;
+
+  function toggleClass(classId: string) {
+    setSelectedClassIds((prev) => {
+      const next = new Set(prev ?? classes.map((c) => c.id));
+      if (next.has(classId)) {
+        next.delete(classId);
+        return next;
+      }
+      next.add(classId);
+      return next.size === classes.length ? null : next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedClassIds((prev) => (prev === null ? new Set() : null));
+  }
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -156,7 +186,7 @@ function TeacherCalendarView({
 
   const dateKey = (d: Date) => d.toISOString().slice(0, 10);
   const eventsByDate = new Map<string, CalendarEventSerialized[]>();
-  for (const event of events) {
+  for (const event of filteredEvents) {
     const dates: string[] =
       event.occurrenceDates && event.occurrenceDates.length > 1
         ? event.occurrenceDates
@@ -169,10 +199,17 @@ function TeacherCalendarView({
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+  const filterLabel =
+    selectedClassIds === null || selectedClassIds.size === classes.length
+      ? "All classes"
+      : selectedClassIds.size === 0
+        ? "No classes"
+        : `${selectedCount} class${selectedCount !== 1 ? "es" : ""}`;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-lg font-medium text-zinc-900">{monthName}</h2>
           <div className="flex gap-1">
             <button
@@ -232,27 +269,92 @@ function TeacherCalendarView({
             </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onAddEvent}
-          className="flex items-center gap-2 self-start rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M5 12h14" />
-            <path d="M12 5v14" />
-          </svg>
-          Add event
-        </button>
+        {classes.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setClassFilterOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              {filterLabel}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={classFilterOpen ? "rotate-180" : ""}
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            {classFilterOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  aria-hidden="true"
+                  onClick={() => setClassFilterOpen(false)}
+                />
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-zinc-200 bg-white py-2 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleAll();
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                  >
+                    <span
+                      className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
+                        selectedClassIds === null || selectedClassIds.size === classes.length
+                          ? "border-red-600 bg-red-600"
+                          : "border-zinc-300"
+                      }`}
+                    >
+                      {(selectedClassIds === null || selectedClassIds.size === classes.length) && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      )}
+                    </span>
+                    All classes
+                  </button>
+                  {classes.map((cls) => {
+                    const isSelected =
+                      selectedClassIds === null ||
+                      selectedClassIds.has(cls.id);
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() => toggleClass(cls.id)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                      >
+                        <span
+                          className={`inline-flex h-4 w-4 items-center justify-center rounded border ${
+                            isSelected
+                              ? "border-red-600 bg-red-600"
+                              : "border-zinc-300"
+                          }`}
+                        >
+                          {isSelected && (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                              <path d="M20 6 9 17l-5-5" />
+                            </svg>
+                          )}
+                        </span>
+                        {cls.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         <div className="grid grid-cols-7 border-b border-zinc-200 bg-zinc-50">
@@ -315,7 +417,7 @@ function TeacherCalendarView({
             );
           })}
         </div>
-        {events.length === 0 && (
+        {filteredEvents.length === 0 && (
           <div className="border-t border-zinc-200 p-8 text-center">
             <p className="text-zinc-600">
               No upcoming events. Add events from the Events tab.
@@ -323,7 +425,7 @@ function TeacherCalendarView({
           </div>
         )}
       </div>
-      {events.length > 0 && (
+      {filteredEvents.length > 0 && (
         <p className="text-sm text-zinc-500">
           Click an event to view details and manage permission slips.
         </p>
@@ -560,39 +662,40 @@ function StudentRow({
   student,
   guardians,
   classId,
+  onLink,
+  onUnlink,
 }: {
   student: ClassStudentSerialized;
   guardians: { id: string; name: string }[];
   classId: string;
+  onLink: (guardianId: string) => void;
+  onUnlink: (guardianId: string) => void;
 }) {
-  const [linkingGuardianId, setLinkingGuardianId] = useState<string>("");
-  const [isPending, startTransition] = useTransition();
-  const router = useRouter();
+  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState("");
 
   const unlinkedGuardians = guardians.filter(
     (g) => !student.guardianIds.includes(g.id)
   );
 
+  const filteredGuardians = linkSearchQuery.trim()
+    ? unlinkedGuardians.filter((g) =>
+        g.name.toLowerCase().includes(linkSearchQuery.toLowerCase().trim())
+      )
+    : unlinkedGuardians;
+
   function handleLink(guardianId: string) {
     if (!guardianId) return;
-    startTransition(async () => {
-      const result = await linkGuardianAction(classId, student.id, guardianId);
-      if (result.success) {
-        setLinkingGuardianId("");
-        router.refresh();
-      }
-    });
+    setLinkDropdownOpen(false);
+    setLinkSearchQuery("");
+    onLink(guardianId);
   }
 
   function handleUnlink(guardianId: string) {
-    startTransition(async () => {
-      const result = await unlinkGuardianAction(
-        classId,
-        student.id,
-        guardianId
-      );
-      if (result.success) router.refresh();
-    });
+    const g = guardians.find((x) => x.id === guardianId);
+    const name = g?.name ?? "this parent";
+    if (!confirm(`Remove link between ${student.name} and ${name}? This can be undone by linking again.`)) return;
+    onUnlink(guardianId);
   }
 
   return (
@@ -608,11 +711,6 @@ function StudentRow({
         )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        {student.guardianIds.length > 0 && (
-          <span className="text-xs text-zinc-600">
-            Linked: {student.guardianNames.join(", ")}
-          </span>
-        )}
         {student.guardianIds.map((gid) => {
           const g = guardians.find((x) => x.id === gid);
           return (
@@ -620,8 +718,7 @@ function StudentRow({
               key={gid}
               type="button"
               onClick={() => handleUnlink(gid)}
-              disabled={isPending}
-              className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700 hover:bg-red-200"
+              className="rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs font-medium text-zinc-800 shadow-sm hover:bg-zinc-50"
               title="Unlink"
             >
               ✕ {g?.name ?? "Parent"}
@@ -629,23 +726,59 @@ function StudentRow({
           );
         })}
         {unlinkedGuardians.length > 0 ? (
-          <select
-            value={linkingGuardianId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setLinkingGuardianId(id);
-              if (id) handleLink(id);
-            }}
-            disabled={isPending}
-            className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
-          >
-            <option value="">+ Link parent</option>
-            {unlinkedGuardians.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setLinkDropdownOpen((o) => !o)}
+              className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 hover:bg-zinc-50"
+            >
+              + Link parent
+            </button>
+            {linkDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  aria-hidden="true"
+                  onClick={() => {
+                    setLinkDropdownOpen(false);
+                    setLinkSearchQuery("");
+                  }}
+                />
+                <div className="absolute left-0 top-full z-20 mt-1 min-w-[200px] max-w-[280px] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                  <div className="border-b border-zinc-100 px-2 pb-2">
+                    <input
+                      type="text"
+                      value={linkSearchQuery}
+                      onChange={(e) => setLinkSearchQuery(e.target.value)}
+                      placeholder="Search parents..."
+                      className="w-full rounded border border-zinc-200 px-2 py-1.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-300"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {filteredGuardians.length > 0 ? (
+                      filteredGuardians.map((g) => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => handleLink(g.id)}
+                          className="w-full px-3 py-2 text-left text-xs text-zinc-700 hover:bg-zinc-50"
+                        >
+                          {g.name}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-zinc-500">
+                        {linkSearchQuery.trim()
+                          ? "No parents match your search"
+                          : "No parents to link"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         ) : guardians.length === 0 ? (
           <span className="text-xs text-zinc-400">No parents in class yet</span>
         ) : null}
@@ -668,12 +801,76 @@ export function TeacherDashboard({
   conversationSummaries,
 }: TeacherDashboardProps) {
   const router = useRouter();
+  const [classesState, setClassesState] = useState(classes);
   const [slotsByClass, setSlotsByClass] = useState(interviewSlotsByClass);
   const [permissionSlipStatusState, setPermissionSlipStatusState] =
     useState(permissionSlipStatus);
   useEffect(() => {
+    setClassesState(classes);
+  }, [classes]);
+  useEffect(() => {
     setSlotsByClass(interviewSlotsByClass);
   }, [interviewSlotsByClass]);
+
+  function handleLinkGuardian(classId: string, studentId: string, guardianId: string) {
+    const guardian = classesState.find((c) => c.id === classId)?.guardians?.find((g) => g.id === guardianId);
+    const guardianName = guardian?.name ?? "Parent";
+    const prev = classesState;
+    setClassesState((arr) =>
+      arr.map((cls) =>
+        cls.id !== classId
+          ? cls
+          : {
+              ...cls,
+              students: cls.students.map((s) =>
+                s.id !== studentId
+                  ? s
+                  : {
+                      ...s,
+                      guardianIds: [...s.guardianIds, guardianId],
+                      guardianNames: [...s.guardianNames, guardianName],
+                    }
+              ),
+            }
+      )
+    );
+    linkGuardianAction(classId, studentId, guardianId).then((res) => {
+      if (!res.success && res.error) {
+        setClassesState(prev);
+        alert(res.error);
+      }
+    });
+  }
+
+  function handleUnlinkGuardian(classId: string, studentId: string, guardianId: string) {
+    const prev = classesState;
+    setClassesState((arr) =>
+      arr.map((cls) =>
+        cls.id !== classId
+          ? cls
+          : {
+              ...cls,
+              students: cls.students.map((s) =>
+                s.id !== studentId
+                  ? s
+                  : {
+                      ...s,
+                      guardianIds: s.guardianIds.filter((id) => id !== guardianId),
+                      guardianNames: s.guardianIds
+                        .map((id, i) => (id === guardianId ? null : s.guardianNames[i] ?? ""))
+                        .filter((n): n is string => n !== null),
+                    }
+              ),
+            }
+      )
+    );
+    unlinkGuardianAction(classId, studentId, guardianId).then((res) => {
+      if (!res.success && res.error) {
+        setClassesState(prev);
+        alert(res.error);
+      }
+    });
+  }
   useEffect(() => {
     setPermissionSlipStatusState(permissionSlipStatus);
   }, [permissionSlipStatus]);
@@ -685,6 +882,7 @@ export function TeacherDashboard({
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addStudentsClass, setAddStudentsClass] =
     useState<TeacherClassSerialized | null>(null);
+  const [viewAllStudentsClassId, setViewAllStudentsClassId] = useState<string | null>(null);
   const [uploadingFormEventId, setUploadingFormEventId] = useState<
     string | null
   >(null);
@@ -720,7 +918,9 @@ export function TeacherDashboard({
     studentIdsWithSlot: string[];
   } | null>(null);
   const [openSlotMenuId, setOpenSlotMenuId] = useState<string | null>(null);
+  const [openRemoveAllMenuClassId, setOpenRemoveAllMenuClassId] = useState<string | null>(null);
   const [deletingSlotId, setDeletingSlotId] = useState<string | null>(null);
+  const [deletingAllSlotsForClassId, setDeletingAllSlotsForClassId] = useState<string | null>(null);
   const [unbookingSlotId, setUnbookingSlotId] = useState<string | null>(null);
   const [selectedMessageStudent, setSelectedMessageStudent] = useState<{
     studentId: string;
@@ -839,11 +1039,23 @@ export function TeacherDashboard({
         {/* My Classes tab */}
         {activeTab === "classes" && (
         <section>
-          <h2 className="mb-4 text-lg font-medium text-zinc-900">
-            My Classes
-          </h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-medium text-zinc-900">
+              My Classes
+            </h2>
+            <Link
+              href="/onboarding/create-class"
+              className="flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+              </svg>
+              Create new class
+            </Link>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {classes.map((cls) => (
+            {classesState.map((cls) => (
               <div
                 key={cls.id || cls.code}
                 className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
@@ -883,16 +1095,16 @@ export function TeacherDashboard({
                     </button>
                   </div>
                   {cls.students?.length > 0 ? (
-                    <div className="space-y-1">
-                      {cls.students.map((s) => (
-                        <StudentRow
-                          key={s.id}
-                          student={s}
-                          guardians={cls.guardians ?? []}
-                          classId={cls.id}
-                        />
-                      ))}
-                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {cls.students.length} student{cls.students.length !== 1 ? "s" : ""}.{" "}
+                      <button
+                        type="button"
+                        onClick={() => setViewAllStudentsClassId(cls.id)}
+                        className="font-medium text-zinc-700 hover:text-zinc-900"
+                      >
+                        View all
+                      </button>
+                    </p>
                   ) : (
                     <p className="text-xs text-zinc-500">
                       No students yet. Add students and link them to parents.
@@ -902,16 +1114,10 @@ export function TeacherDashboard({
               </div>
             ))}
           </div>
-          <Link
-            href="/onboarding/create-class"
-            className="mt-4 inline-flex items-center text-sm font-medium text-zinc-600 hover:text-zinc-900"
-          >
-            + Create another class
-          </Link>
         </section>
         )}
 
-        {/* Events tab - shows all events (permission slip or not) */}
+        {/* Events tab - shows all events (permission slip or not), grouped by class */}
         {activeTab === "permissionslips" && (
         <section>
           <div className="mb-4 flex items-center justify-between">
@@ -931,98 +1137,205 @@ export function TeacherDashboard({
             </button>
           </div>
           {permissionSlipEvents.length > 0 ? (
-          <>
-            <p className="mb-4 text-sm text-zinc-600">
-              All upcoming events. Click one to view details. Events that require
+          <div className="space-y-6">
+            <p className="text-sm text-zinc-600">
+              Upcoming events by class. Click one to view details. Events that require
               permission slips show submission and payment status.
             </p>
-            <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
-                      Event
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {permissionSlipEvents.map((event, i) => {
-                    const status = statusByEvent.get(event.id);
-                    const pending =
-                      status?.students.filter((s) => s.status === "pending") ??
-                      [];
-                    const noParent =
-                      status?.students.filter(
-                        (s) => s.status === "no_parent"
-                      ) ?? [];
-                    const signed =
-                      status?.students.filter((s) => s.status === "signed") ??
-                      [];
-                    const statusParts = [];
-                    if (event.requiresPermissionSlip) {
-                      if (pending.length) statusParts.push(`${pending.length} pending`);
-                      if (noParent.length)
-                        statusParts.push(`${noParent.length} no parent`);
-                      if (signed.length) statusParts.push(`${signed.length} submitted`);
-                    }
-                    const statusText =
-                      statusParts.length > 0
-                        ? statusParts.join(", ")
-                        : event.requiresPermissionSlip
-                          ? "No students"
-                          : "—";
-
-                    return (
-                      <tr
-                        key={event.id}
-                        onClick={() =>
-                          setSelectedPermissionSlipEventId(event.id)
-                        }
-                        className={`cursor-pointer transition-colors ${
-                          i % 2 === 0
-                            ? "bg-white hover:bg-zinc-50"
-                            : "bg-zinc-50/50 hover:bg-zinc-100/50"
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <span className="font-medium text-zinc-900">
-                            {event.title}
-                          </span>
-                          {event.occurrenceDates &&
-                            event.occurrenceDates.length > 1 && (
-                              <span className="ml-2 text-xs text-zinc-500">
-                                ({event.occurrenceDates.length} dates)
-                              </span>
-                            )}
-                          {event.cost != null && event.cost > 0 && (
-                            <span className="ml-2 text-xs text-zinc-500">
-                              ${event.cost.toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-zinc-600">
-                          {event.occurrenceDates &&
-                          event.occurrenceDates.length > 1
-                            ? formatOccurrenceDates(event.occurrenceDates)
-                            : formatEventDate(event.startAt)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-zinc-600">
-                          {statusText}
-                        </td>
+            {classesState.map((cls) => {
+              const classEvents = permissionSlipEvents.filter(
+                (e) => e.classId === cls.id
+              );
+              if (classEvents.length === 0) return null;
+              return (
+                <div
+                  key={cls.id}
+                  className="rounded-xl border border-zinc-200 bg-white overflow-hidden"
+                >
+                  <h3 className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 font-medium text-zinc-900">
+                    {cls.name}
+                  </h3>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-zinc-200 bg-zinc-50/70">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                          Event
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                          Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                          Status
+                        </th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {classEvents.map((event, i) => {
+                        const status = statusByEvent.get(event.id);
+                        const pending =
+                          status?.students.filter((s) => s.status === "pending") ??
+                          [];
+                        const noParent =
+                          status?.students.filter(
+                            (s) => s.status === "no_parent"
+                          ) ?? [];
+                        const signed =
+                          status?.students.filter((s) => s.status === "signed") ??
+                          [];
+                        const statusParts = [];
+                        if (event.requiresPermissionSlip) {
+                          if (pending.length) statusParts.push(`${pending.length} pending`);
+                          if (noParent.length)
+                            statusParts.push(`${noParent.length} no parent`);
+                          if (signed.length) statusParts.push(`${signed.length} submitted`);
+                        }
+                        const statusText =
+                          statusParts.length > 0
+                            ? statusParts.join(", ")
+                            : event.requiresPermissionSlip
+                              ? "No students"
+                              : "—";
 
-          </>
+                        return (
+                          <tr
+                            key={event.id}
+                            onClick={() =>
+                              setSelectedPermissionSlipEventId(event.id)
+                            }
+                            className={`cursor-pointer transition-colors ${
+                              i % 2 === 0
+                                ? "bg-white hover:bg-zinc-50"
+                                : "bg-zinc-50/50 hover:bg-zinc-100/50"
+                            }`}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-zinc-900">
+                                {event.title}
+                              </span>
+                              {event.occurrenceDates &&
+                                event.occurrenceDates.length > 1 && (
+                                  <span className="ml-2 text-xs text-zinc-500">
+                                    ({event.occurrenceDates.length} dates)
+                                  </span>
+                                )}
+                              {event.cost != null && event.cost > 0 && (
+                                <span className="ml-2 text-xs text-zinc-500">
+                                  ${event.cost.toFixed(2)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-600">
+                              {event.occurrenceDates &&
+                              event.occurrenceDates.length > 1
+                                ? formatOccurrenceDates(event.occurrenceDates)
+                                : formatEventDate(event.startAt)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-600">
+                              {statusText}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+            {permissionSlipEvents.some((e) => !e.classId) && (
+              <div
+                className="rounded-xl border border-zinc-200 bg-white overflow-hidden"
+              >
+                <h3 className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 font-medium text-zinc-900">
+                  All classes
+                </h3>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50/70">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                        Event
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-zinc-600">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {permissionSlipEvents
+                      .filter((e) => !e.classId)
+                      .map((event, i) => {
+                        const status = statusByEvent.get(event.id);
+                        const pending =
+                          status?.students.filter((s) => s.status === "pending") ??
+                          [];
+                        const noParent =
+                          status?.students.filter(
+                            (s) => s.status === "no_parent"
+                          ) ?? [];
+                        const signed =
+                          status?.students.filter((s) => s.status === "signed") ??
+                          [];
+                        const statusParts = [];
+                        if (event.requiresPermissionSlip) {
+                          if (pending.length) statusParts.push(`${pending.length} pending`);
+                          if (noParent.length)
+                            statusParts.push(`${noParent.length} no parent`);
+                          if (signed.length) statusParts.push(`${signed.length} submitted`);
+                        }
+                        const statusText =
+                          statusParts.length > 0
+                            ? statusParts.join(", ")
+                            : event.requiresPermissionSlip
+                              ? "No students"
+                              : "—";
+
+                        return (
+                          <tr
+                            key={event.id}
+                            onClick={() =>
+                              setSelectedPermissionSlipEventId(event.id)
+                            }
+                            className={`cursor-pointer transition-colors ${
+                              i % 2 === 0
+                                ? "bg-white hover:bg-zinc-50"
+                                : "bg-zinc-50/50 hover:bg-zinc-100/50"
+                            }`}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-zinc-900">
+                                {event.title}
+                              </span>
+                              {event.occurrenceDates &&
+                                event.occurrenceDates.length > 1 && (
+                                  <span className="ml-2 text-xs text-zinc-500">
+                                    ({event.occurrenceDates.length} dates)
+                                  </span>
+                                )}
+                              {event.cost != null && event.cost > 0 && (
+                                <span className="ml-2 text-xs text-zinc-500">
+                                  ${event.cost.toFixed(2)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-600">
+                              {event.occurrenceDates &&
+                              event.occurrenceDates.length > 1
+                                ? formatOccurrenceDates(event.occurrenceDates)
+                                : formatEventDate(event.startAt)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-600">
+                              {statusText}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
           ) : (
             <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 p-8 text-center">
               <p className="text-zinc-600">
@@ -1049,10 +1362,10 @@ export function TeacherDashboard({
         <section>
           <TeacherCalendarView
             events={upcomingEvents}
+            classes={classesState.map((c) => ({ id: c.id, name: c.name }))}
             onEventClick={(eventId) => {
               setSelectedPermissionSlipEventId(eventId);
             }}
-            onAddEvent={() => setIsAddEventOpen(true)}
           />
         </section>
         )}
@@ -1516,7 +1829,109 @@ export function TeacherDashboard({
                               Status
                             </th>
                             <th className="px-3 py-2 text-right font-medium text-zinc-700">
-                              Actions
+                              <div className="flex items-center justify-end gap-1">
+                                <span>Actions</span>
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setOpenRemoveAllMenuClassId(
+                                        openRemoveAllMenuClassId === classId ? null : classId
+                                      )
+                                    }
+                                    disabled={deletingAllSlotsForClassId !== null}
+                                    className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                    aria-label="Actions menu"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <circle cx="12" cy="12" r="1" />
+                                      <circle cx="12" cy="5" r="1" />
+                                      <circle cx="12" cy="19" r="1" />
+                                    </svg>
+                                  </button>
+                                  {openRemoveAllMenuClassId === classId && (
+                                    <>
+                                      <div
+                                        className="fixed inset-0 z-10"
+                                        aria-hidden="true"
+                                        onClick={() => setOpenRemoveAllMenuClassId(null)}
+                                      />
+                                      <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            setOpenRemoveAllMenuClassId(null);
+                                            if (
+                                              !confirm(
+                                                `Remove all ${slots.length} time slots for ${className}? This cannot be undone.`
+                                              )
+                                            )
+                                              return;
+                                            setDeletingAllSlotsForClassId(classId);
+                                            const prev = slotsByClass;
+                                            const res = await deleteAllInterviewSlotsForClassAction(classId);
+                                            setDeletingAllSlotsForClassId(null);
+                                            if (!res.success && res.error) {
+                                              setSlotsByClass(prev);
+                                              alert(res.error);
+                                              return;
+                                            }
+                                            setSlotsByClass((arr) =>
+                                              arr.map((c) =>
+                                                c.classId !== classId
+                                                  ? c
+                                                  : { ...c, slots: [] }
+                                              )
+                                            );
+                                            router.refresh();
+                                          }}
+                                          disabled={deletingAllSlotsForClassId !== null}
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                        >
+                                          {deletingAllSlotsForClassId === classId ? (
+                                            <>
+                                              <svg
+                                                className="h-4 w-4 shrink-0 animate-spin"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                aria-hidden="true"
+                                              >
+                                                <circle
+                                                  className="opacity-25"
+                                                  cx="12"
+                                                  cy="12"
+                                                  r="10"
+                                                  stroke="currentColor"
+                                                  strokeWidth="4"
+                                                />
+                                                <path
+                                                  className="opacity-75"
+                                                  fill="currentColor"
+                                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                />
+                                              </svg>
+                                              Removing...
+                                            </>
+                                          ) : (
+                                            "Remove all time slots"
+                                          )}
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </th>
                           </tr>
                         </thead>
@@ -1700,11 +2115,36 @@ export function TeacherDashboard({
                                               );
                                             }}
                                             disabled={deletingSlotId !== null}
-                                            className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
                                           >
-                                            {deletingSlotId === s.id
-                                              ? "Removing..."
-                                              : "Remove slot"}
+                                            {deletingSlotId === s.id ? (
+                                              <>
+                                                <svg
+                                                  className="h-4 w-4 shrink-0 animate-spin"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                  fill="none"
+                                                  viewBox="0 0 24 24"
+                                                  aria-hidden="true"
+                                                >
+                                                  <circle
+                                                    className="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    strokeWidth="4"
+                                                  />
+                                                  <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                  />
+                                                </svg>
+                                                Removing...
+                                              </>
+                                            ) : (
+                                              "Remove slot"
+                                            )}
                                           </button>
                                         </div>
                                       </>
@@ -2338,6 +2778,56 @@ export function TeacherDashboard({
             onClose={() => setAddStudentsClass(null)}
           />
         )}
+
+        {viewAllStudentsClassId && (() => {
+          const cls = classesState.find((c) => c.id === viewAllStudentsClassId);
+          if (!cls) return null;
+          return (
+            <>
+              <div
+                className="fixed inset-0 z-40 bg-black/50"
+                aria-hidden="true"
+                onClick={() => setViewAllStudentsClassId(null)}
+              />
+              <div className="fixed left-4 right-4 top-4 bottom-4 z-50 mx-auto max-h-[90vh] w-full max-w-lg overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:-translate-x-1/2 sm:-translate-y-1/2">
+                <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-zinc-900">
+                    All Students — {cls.name}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setViewAllStudentsClassId(null)}
+                    className="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="Close"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="max-h-[calc(90vh-5rem)] overflow-y-auto p-6">
+                  <div className="space-y-2">
+                    {cls.students?.map((s) => (
+                      <StudentRow
+                        key={s.id}
+                        student={s}
+                        guardians={cls.guardians ?? []}
+                        classId={cls.id}
+                        onLink={(guardianId) =>
+                          handleLinkGuardian(cls.id, s.id, guardianId)
+                        }
+                        onUnlink={(guardianId) =>
+                          handleUnlinkGuardian(cls.id, s.id, guardianId)
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         <EditEventModal
           event={editingEvent}

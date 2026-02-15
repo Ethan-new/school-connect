@@ -58,7 +58,7 @@ function formatEventDate(iso: string): string {
 }
 
 function formatDueDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+  return new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -96,15 +96,14 @@ function formatEventTimeRange(startIso: string, endIso: string): string {
     day: "numeric",
     year: "numeric",
   });
-  const startTime = start.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const endTime = end.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${dateStr} · ${startTime} – ${endTime}`;
+  const isAllDay =
+    start.getHours() === 0 &&
+    start.getMinutes() === 0 &&
+    (end.getHours() === 23 || (end.getHours() === 0 && end.getMinutes() === 0 && end.getDate() > start.getDate()));
+  const timeStr = isAllDay
+    ? "All day"
+    : `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} – ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+  return `${dateStr} · ${timeStr}`;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -626,7 +625,7 @@ export function ParentDashboard({
                           {item.occurrenceDates &&
                           item.occurrenceDates.length > 1
                             ? formatOccurrenceDates(item.occurrenceDates)
-                            : formatDueDate(item.eventStartAt)}
+                            : formatDueDate(item.permissionSlipDueDate ?? item.eventStartAt)}
                         </td>
                       </tr>
                     ))
@@ -728,6 +727,11 @@ export function ParentDashboard({
                       {(item.cost != null && item.cost > 0) && (
                         <p className="text-sm font-medium text-zinc-700">
                           Cost: ${item.cost.toFixed(2)}
+                        </p>
+                      )}
+                      {item.permissionSlipDueDate && (item.requiresPermissionSlip || (item.cost ?? 0) > 0) && (
+                        <p className="text-sm font-medium text-amber-700">
+                          Due by {formatDueDate(item.permissionSlipDueDate)} (sign and submit payment)
                         </p>
                       )}
                       {item.status === "unread" && task && !item.requiresPermissionSlip && (item.cost ?? 0) > 0 && (
@@ -1203,9 +1207,21 @@ export function ParentDashboard({
         {/* My Student tab */}
         {activeTab === "mystudent" && (
           <section>
-            <h2 className="mb-4 text-lg font-medium text-zinc-900">
-              My Classes
-            </h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-medium text-zinc-900">
+                My Classes
+              </h2>
+              <Link
+                href="/onboarding/class-code"
+                className="flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-zinc-900"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="M12 5v14" />
+                </svg>
+                Add class
+              </Link>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {classes.map((cls) => (
                 <div
@@ -1279,12 +1295,6 @@ export function ParentDashboard({
                 </div>
               ))}
             </div>
-            <Link
-              href="/onboarding/class-code"
-              className="mt-4 inline-flex text-sm font-medium text-zinc-600 hover:text-zinc-900"
-            >
-              + Add another class
-            </Link>
           </section>
         )}
       </main>

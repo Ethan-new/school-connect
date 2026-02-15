@@ -232,6 +232,34 @@ export async function deleteInterviewSlot(
 }
 
 /**
+ * Teacher removes all slots for a class. Only teacher of the class can remove.
+ */
+export async function deleteAllInterviewSlotsForClass(
+  auth0Id: string,
+  classId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!isDbConfigured()) {
+    return { success: false, error: "Database not configured" };
+  }
+
+  try {
+    const classes = await classesCollection();
+    const cls = await classes.findOne({ _id: new ObjectId(classId) });
+    if (!cls) return { success: false, error: "Class not found" };
+    if (!cls.teacherIds?.includes(auth0Id)) {
+      return { success: false, error: "You don't have access to this class" };
+    }
+
+    const slots = await interviewSlotsCollection();
+    await slots.deleteMany({ classId });
+    return { success: true };
+  } catch (error) {
+    console.error("[deleteAllInterviewSlotsForClass] Failed:", error);
+    return { success: false, error: "Failed to remove slots" };
+  }
+}
+
+/**
  * Teacher books a slot for a parent without an account.
  */
 export async function bookInterviewSlotManually(

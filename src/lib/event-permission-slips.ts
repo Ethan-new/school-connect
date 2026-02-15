@@ -50,6 +50,8 @@ export interface PermissionSlipTask {
   requiresPermissionSlip?: boolean;
   /** When true, teacher has uploaded a permission form PDF for parents to sign */
   hasPermissionForm?: boolean;
+  /** Due date for form and payment (YYYY-MM-DD) */
+  permissionSlipDueDate?: string | null;
 }
 
 export interface InboxItem {
@@ -73,6 +75,8 @@ export interface InboxItem {
   requiresPermissionSlip?: boolean;
   /** When true, teacher has uploaded a permission form PDF for parents to sign */
   hasPermissionForm?: boolean;
+  /** Due date for form and payment (YYYY-MM-DD) */
+  permissionSlipDueDate?: string | null;
 }
 
 /**
@@ -165,6 +169,7 @@ export async function getParentPermissionSlipTasks(
           occurrenceDates: event.occurrenceDates,
           requiresPermissionSlip: event.requiresPermissionSlip ?? false,
           hasPermissionForm: Boolean(event.permissionFormPdfBase64),
+          permissionSlipDueDate: event.permissionSlipDueDate ?? null,
         });
       }
     }
@@ -269,6 +274,7 @@ export async function getParentInboxItems(
           occurrenceDates: event.occurrenceDates,
           requiresPermissionSlip: event.requiresPermissionSlip ?? false,
           hasPermissionForm: Boolean(event.permissionFormPdfBase64),
+          permissionSlipDueDate: event.permissionSlipDueDate ?? null,
         });
       }
     }

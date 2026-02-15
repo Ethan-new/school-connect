@@ -36,6 +36,8 @@ export interface CreateEventInput {
   costPerOccurrence?: number;
   /** Recurring: occurrence dates (YYYY-MM-DD). When set with costPerOccurrence, total = costPerOccurrence × length */
   occurrenceDates?: string[];
+  /** Due date for form and payment (YYYY-MM-DD). Parents must submit by this date. */
+  permissionSlipDueDate?: string;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface CreateEventInput {
 export async function createCalendarEvent(
   auth0Id: string,
   input: CreateEventInput
-): Promise<{ success: true } | { success: false; error: string }> {
+): Promise<{ success: true; eventId: string } | { success: false; error: string }> {
   if (!isDbConfigured()) {
     return { success: false, error: "Database not configured" };
   }
@@ -115,6 +117,10 @@ export async function createCalendarEvent(
         : undefined;
     const storedOccurrenceDates = isRecurring ? occurrenceDates.sort() : undefined;
 
+    const permissionSlipDueDate = input.permissionSlipDueDate?.match(/^\d{4}-\d{2}-\d{2}$/)
+      ? input.permissionSlipDueDate
+      : undefined;
+
     const result = await events.insertOne({
       schoolId: input.schoolId,
       classId: input.classId ?? null,
@@ -127,6 +133,7 @@ export async function createCalendarEvent(
       cost,
       occurrenceDates: storedOccurrenceDates,
       costPerOccurrence,
+      permissionSlipDueDate,
       createdAt: new Date(),
     });
 
@@ -183,7 +190,7 @@ export async function createCalendarEvent(
       }
     }
 
-    return { success: true };
+    return { success: true, eventId: eventId ?? "" };
   } catch (error) {
     console.error("[createCalendarEvent] Failed:", error);
     return { success: false, error: "Failed to create event. Please try again." };
@@ -199,6 +206,7 @@ export interface UpdateEventInput {
   cost?: number | null;
   costPerOccurrence?: number | null;
   occurrenceDates?: string[] | null;
+  permissionSlipDueDate?: string | null;
 }
 
 /**
@@ -294,6 +302,10 @@ export async function updateCalendarEvent(
       } else {
         update.occurrenceDates = null;
       }
+    }
+    if (input.permissionSlipDueDate !== undefined) {
+      update.permissionSlipDueDate =
+        input.permissionSlipDueDate?.match(/^\d{4}-\d{2}-\d{2}$/) ?? null;
     }
 
     if (Object.keys(update).length === 0) {

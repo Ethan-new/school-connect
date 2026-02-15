@@ -72,6 +72,8 @@ export interface CalendarEventSerialized {
   occurrenceDates?: string[];
   /** Recurring: cost per occurrence */
   costPerOccurrence?: number;
+  /** Due date for form and payment (YYYY-MM-DD) */
+  permissionSlipDueDate?: string | null;
 }
 
 export interface TeacherInterviewClass {
@@ -233,6 +235,7 @@ function serializeEvent(event: CalendarEvent): CalendarEventSerialized {
     cost,
     occurrenceDates: event.occurrenceDates,
     costPerOccurrence: event.costPerOccurrence,
+    permissionSlipDueDate: event.permissionSlipDueDate ?? null,
   };
 }
 
