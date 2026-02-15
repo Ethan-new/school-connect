@@ -499,6 +499,7 @@ export interface ParentInterviewClass {
   classId: string;
   className: string;
   schoolName: string;
+  teacherName: string;
   children: { id: string; name: string; claimedSlotId?: string; claimedSlotStartAt?: string }[];
   slots: InterviewSlotSerialized[];
 }
@@ -596,10 +597,25 @@ export async function getInterviewDataForGuardian(
         // ignore
       }
 
+      let teacherName = "";
+      const teacherIds = cls.teacherIds ?? [];
+      if (teacherIds.length > 0) {
+        const teacherDocs = await users
+          .find({ auth0Id: { $in: teacherIds } })
+          .toArray();
+        const names = teacherDocs
+          .map((u) => u.name?.trim())
+          .filter((n): n is string => Boolean(n));
+        if (names.length > 0) {
+          teacherName = names.join(", ");
+        }
+      }
+
       result.push({
         classId,
         className: cls.name ?? "Class",
         schoolName,
+        teacherName,
         children,
         slots: slotSerialized,
       });

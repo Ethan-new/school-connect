@@ -4,9 +4,9 @@ import { auth0 } from "@/lib/auth0";
 import { getDbUser } from "@/lib/sync-user";
 import { teacherHasClass } from "@/lib/teacher-class";
 import { isDbConfigured } from "@/lib/db";
-import { CreateClassForm } from "./create-class-form";
+import { TeacherNameForm } from "./teacher-name-form";
 
-export default async function CreateClassPage() {
+export default async function TeacherNamePage() {
   const session = await auth0.getSession();
   if (!session) {
     redirect("/auth/login");
@@ -20,8 +20,9 @@ export default async function CreateClassPage() {
   if (!dbUser?.roleSelectedAt || dbUser.role !== "teacher") {
     redirect("/onboarding");
   }
-  if (!dbUser.teacherNameSetAt) {
-    redirect("/onboarding/teacher-name");
+  if (dbUser.teacherNameSetAt) {
+    const hasClass = await teacherHasClass(session.user.sub);
+    redirect(hasClass ? "/" : "/onboarding/create-class");
   }
 
   const hasClass = await teacherHasClass(session.user.sub);
@@ -40,13 +41,17 @@ export default async function CreateClassPage() {
               priority
             />
             <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
-              {hasClass ? "Create another class" : "Create your first class"}
+              What&apos;s your name?
             </h1>
             <p className="mt-2 text-center text-sm text-zinc-600">
-              Set up your classroom and get a code to share with parents.
+              We&apos;ll use this so parents can identify you when they connect
+              to your classes.
             </p>
             <div className="mt-8 w-full">
-              <CreateClassForm />
+              <TeacherNameForm
+                initialName={dbUser.name}
+                redirectTo={hasClass ? "/" : "/onboarding/create-class"}
+              />
             </div>
           </div>
         </div>

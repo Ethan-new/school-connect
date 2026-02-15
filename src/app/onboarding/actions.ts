@@ -21,6 +21,6 @@ export async function selectRole(
 
   return {
     success: true,
-    redirectTo: role === "parent" ? "/onboarding/parent-name" : "/onboarding/create-class",
+    redirectTo: role === "parent" ? "/onboarding/parent-name" : "/onboarding/teacher-name",
   };
 }

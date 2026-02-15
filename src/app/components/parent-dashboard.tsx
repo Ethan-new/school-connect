@@ -272,7 +272,14 @@ function ParentInterviewClassSection({
             className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium text-zinc-800">{child.name}</span>
+              <span className="font-medium text-zinc-800">
+                {child.name}
+                {item.teacherName && (
+                  <span className="ml-1 font-normal text-zinc-600">
+                    (with {item.teacherName})
+                  </span>
+                )}
+              </span>
               {child.claimedSlotId ? (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-zinc-600">
@@ -584,7 +591,7 @@ export function ParentDashboard({
                       >
                         <td className="px-4 py-3">
                           {item.status === "unread" ? (
-                            <span className="flex items-center gap-2 text-sm">
+                            <span className="flex items-center gap-2 text-sm font-medium text-zinc-900">
                               <span className="h-2 w-2 rounded-full bg-red-500" />
                               Unread
                             </span>
@@ -1233,6 +1240,11 @@ export function ParentDashboard({
                       <h3 className="font-medium text-zinc-900">
                         {cls.name}
                       </h3>
+                      {cls.children && cls.children.length > 0 && (
+                        <p className="mt-1 text-sm text-zinc-600">
+                          {cls.children.length === 1 ? "My child" : "My children"}: {cls.children.map((c) => c.name).join(", ")}
+                        </p>
+                      )}
                       <p className="mt-1 text-sm text-zinc-600">
                         {cls.schoolName}
                       </p>

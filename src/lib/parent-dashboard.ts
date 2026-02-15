@@ -6,6 +6,7 @@ import {
   classesCollection,
   schoolsCollection,
   calendarEventsCollection,
+  studentsCollection,
 } from "./db/collections";
 import type { InboxItem } from "./event-permission-slips";
 import { getPublishedReportCardsForGuardian } from "./report-cards";
@@ -28,6 +29,8 @@ export interface ParentClassSerialized {
   code?: string;
   term: string;
   schoolName: string;
+  /** This parent's children in this class (linked to their account) */
+  children: { id: string; name: string }[];
 }
 
 export interface CalendarEventSerialized {
@@ -140,7 +143,10 @@ export async function getParentUpcomingEvents(
   }
 }
 
-function serializeClass(cls: ParentClassWithSchool): ParentClassSerialized {
+function serializeClass(
+  cls: ParentClassWithSchool,
+  children: { id: string; name: string }[]
+): ParentClassSerialized {
   return {
     id: cls._id?.toString() ?? "",
     schoolId: cls.schoolId,
@@ -148,6 +154,7 @@ function serializeClass(cls: ParentClassWithSchool): ParentClassSerialized {
     code: cls.code,
     term: cls.term,
     schoolName: cls.schoolName,
+    children,
   };
 }
 
@@ -190,8 +197,38 @@ export async function getParentDashboardData(
     getConversationsForParent(auth0Id),
   ]);
 
+  const students = await studentsCollection();
+  const childrenByClass = new Map<string, { id: string; name: string }[]>();
+  for (const cls of classes) {
+    const classId = cls._id?.toString();
+    const studentIds = cls.studentIds ?? [];
+    if (!classId || studentIds.length === 0) {
+      childrenByClass.set(classId ?? "", []);
+      continue;
+    }
+    const studentDocs = await students
+      .find({
+        _id: {
+          $in: studentIds
+            .filter((id) => /^[a-f0-9]{24}$/i.test(id))
+            .map((id) => new ObjectId(id)),
+        },
+        guardianIds: auth0Id,
+      })
+      .toArray();
+    childrenByClass.set(
+      classId,
+      studentDocs.map((s) => ({
+        id: s._id?.toString() ?? "",
+        name: s.name ?? "Student",
+      }))
+    );
+  }
+
   return {
-    classes: classes.map(serializeClass),
+    classes: classes.map((cls) =>
+      serializeClass(cls, childrenByClass.get(cls._id?.toString() ?? "") ?? [])
+    ),
     upcomingEvents: upcomingEvents.map(serializeEvent),
     permissionSlipTasks,
     inboxItems,

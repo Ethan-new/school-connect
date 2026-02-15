@@ -111,8 +111,13 @@ export default async function Home() {
         redirect("/onboarding/class-code");
       }
     }
-    if (dbUser.role === "teacher" && !(await teacherHasClass(session.user.sub))) {
-      redirect("/onboarding/create-class");
+    if (dbUser.role === "teacher") {
+      if (!dbUser.teacherNameSetAt) {
+        redirect("/onboarding/teacher-name");
+      }
+      if (!(await teacherHasClass(session.user.sub))) {
+        redirect("/onboarding/create-class");
+      }
     }
   }
 

@@ -11,6 +11,8 @@ export interface User {
   roleSelectedAt?: Date | null;
   /** Set when parent completes name step in onboarding */
   parentNameSetAt?: Date | null;
+  /** Set when teacher completes name step in onboarding */
+  teacherNameSetAt?: Date | null;
   name: string | null;
   email: string | null;
   picture?: string | null;
