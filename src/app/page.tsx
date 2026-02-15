@@ -21,11 +21,11 @@ export default async function Home() {
           <div className="w-full max-w-sm overflow-hidden rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
             <div className="flex flex-col items-center">
               <Image
-                src="/logo_yrdsb_desktop.svg"
-                alt="York Region District School Board"
+                src="/school_connect.png"
+                alt="School Connect"
                 width={160}
                 height={50}
-                className="mb-8 h-10 w-auto"
+                className="mb-8 h-[120px] w-auto"
                 priority
               />
               <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
@@ -36,16 +36,16 @@ export default async function Home() {
               </p>
               <div className="mt-8 flex w-full flex-col gap-3">
                 <a
-                  href="/auth/login?screen_hint=signup"
+                  href="/auth/login"
                   className="flex h-11 w-full items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-700"
                 >
-                  Sign up
+                  Log in
                 </a>
                 <a
-                  href="/auth/login"
+                  href="/auth/login?screen_hint=signup"
                   className="flex h-11 w-full items-center justify-center rounded-lg border border-zinc-300 bg-white px-5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
                 >
-                  Log in
+                  Sign up
                 </a>
               </div>
             </div>
