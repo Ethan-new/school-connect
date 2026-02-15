@@ -62,6 +62,7 @@ Throughout the hackathon, we had difficulty balancing realism and idealism. Alth
 ## Getting Started
 
 ```bash
+npm i
 npm run dev
 ```
 
