@@ -53,14 +53,12 @@ export async function GET(
       return new Response("Event not found", { status: 404 });
     }
 
-    let pdfBytes: Uint8Array;
+    let pdfBuffer: Buffer;
 
     if (slip.status === "signed" && slip.signedPdfBase64) {
-      const buffer = Buffer.from(slip.signedPdfBase64, "base64");
-      pdfBytes = new Uint8Array(buffer);
+      pdfBuffer = Buffer.from(slip.signedPdfBase64, "base64");
     } else if (event.permissionFormPdfBase64) {
-      const buffer = Buffer.from(event.permissionFormPdfBase64, "base64");
-      pdfBytes = new Uint8Array(buffer);
+      pdfBuffer = Buffer.from(event.permissionFormPdfBase64, "base64");
     } else {
       return new Response(
         "Permission form not yet available. The teacher needs to upload a form.",
@@ -76,7 +74,7 @@ export async function GET(
       ? `inline; filename="${filename}"`
       : `attachment; filename="${filename}"`;
 
-    return new Response(pdfBytes, {
+    return new Response(new Uint8Array(pdfBuffer) as unknown as BodyInit, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": disposition,

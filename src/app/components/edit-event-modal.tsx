@@ -52,7 +52,7 @@ export function EditEventModal({
       setEndDate(end.date);
       setEndTime(end.time);
       setRequiresPermissionSlip(event.requiresPermissionSlip ?? false);
-      const recurring = event.occurrenceDates && event.occurrenceDates.length > 1;
+      const recurring = !!(event.occurrenceDates && event.occurrenceDates.length > 1);
       setIsRecurring(recurring);
       setOccurrenceDates(event.occurrenceDates ?? []);
       setCost(

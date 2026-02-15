@@ -126,7 +126,7 @@ export async function getParentPermissionSlipTasks(
       ...new Set(
         pendingSlips
           .map((s) => s.studentId)
-          .filter((id): id is string => Boolean(id) && /^[a-f0-9]{24}$/i.test(id))
+          .filter((id): id is string => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id))
       ),
     ];
     const students = await studentsCollection();
@@ -149,7 +149,7 @@ export async function getParentPermissionSlipTasks(
       const student = slip.studentId
         ? studentMap.get(slip.studentId)
         : undefined;
-      const effectiveCost = getEventEffectiveCost(event);
+      const effectiveCost = event ? getEventEffectiveCost(event) : undefined;
       const hasCost = effectiveCost != null && effectiveCost > 0;
       if (event && cls && (event.requiresPermissionSlip || hasCost)) {
         tasks.push({
@@ -228,7 +228,7 @@ export async function getParentInboxItems(
       ...new Set(
         allSlips
           .map((s) => s.studentId)
-          .filter((id): id is string => Boolean(id) && /^[a-f0-9]{24}$/i.test(id))
+          .filter((id): id is string => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id))
       ),
     ];
     const studentDocs =
@@ -250,7 +250,7 @@ export async function getParentInboxItems(
       const student = slip.studentId
         ? studentMap.get(slip.studentId)
         : undefined;
-      const effectiveCost = getEventEffectiveCost(event);
+      const effectiveCost = event ? getEventEffectiveCost(event) : undefined;
       const hasCost = effectiveCost != null && effectiveCost > 0;
       if (event && cls && (event.requiresPermissionSlip || hasCost)) {
         items.push({
@@ -480,7 +480,7 @@ export async function getEventPermissionSlipStatus(
       .find({
         _id: {
           $in: classIds
-            .filter((id): id is string => Boolean(id) && /^[a-f0-9]{24}$/i.test(id))
+            .filter((id): id is string => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id))
             .map((id) => new ObjectId(id)),
         },
       })
@@ -661,7 +661,10 @@ export async function uploadPermissionSlipForStudent(
         classId,
         studentId,
         guardianId: teacherAuth0Id,
-        ...slipData,
+        status: "signed",
+        signedAt: new Date(),
+        signedPdfBase64: pdfBase64,
+        ...(resolvedPaymentMethod && { paymentMethod: resolvedPaymentMethod }),
         createdAt: new Date(),
       });
     }

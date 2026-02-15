@@ -7,7 +7,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 async function main() {
-  const { ensureIndexes } = await import("../src/lib/db");
+  const { ensureIndexes } = await import("../src/lib/db/index");
   await ensureIndexes();
   console.log("Indexes created successfully.");
 }
