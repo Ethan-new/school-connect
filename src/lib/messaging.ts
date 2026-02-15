@@ -303,27 +303,58 @@ export async function getConversationSummariesForTeacher(
       })
       .toArray();
 
+    const pairKeys = new Set(
+      pairs.map((p) => `${p.guardianId}:${p.studentId}`)
+    );
+    const convoIds = allConvos
+      .map((c) => c._id?.toString())
+      .filter((id): id is string => Boolean(id));
+
+    const [lastMsgDocs, countDocs] =
+      convoIds.length > 0
+        ? await Promise.all([
+            messages
+              .aggregate<{ _id: string; body: string }>([
+                { $match: { conversationId: { $in: convoIds } } },
+                { $sort: { createdAt: -1 } },
+                {
+                  $group: {
+                    _id: "$conversationId",
+                    body: { $first: "$body" },
+                  },
+                },
+              ])
+              .toArray(),
+            messages
+              .aggregate<{ _id: string; count: number }>([
+                { $match: { conversationId: { $in: convoIds } } },
+                { $group: { _id: "$conversationId", count: { $sum: 1 } } },
+              ])
+              .toArray(),
+          ])
+        : [[], []];
+
+    const lastMsgMap = new Map(
+      lastMsgDocs.map((d) => [d._id, d.body])
+    );
+    const countMap = new Map(countDocs.map((d) => [d._id, d.count]));
+
     for (const convo of allConvos) {
       const participants = convo.participantIds ?? [];
       const other = participants.find((id) => id !== teacherId);
       if (!other || !convo.studentId) continue;
       const key = `${other}:${convo.studentId}`;
-      if (!pairs.some((p) => p.guardianId === other && p.studentId === convo.studentId))
-        continue;
+      if (!pairKeys.has(key)) continue;
 
       const convoId = convo._id?.toString() ?? "";
-      const msgs = await messages
-        .find({ conversationId: convoId })
-        .sort({ createdAt: -1 })
-        .limit(1)
-        .toArray();
-      const count = await messages.countDocuments({ conversationId: convoId });
+      const body = lastMsgMap.get(convoId);
+      const count = countMap.get(convoId) ?? 0;
 
       map.set(key, {
         conversationId: convoId,
         lastMessageAt: convo.lastMessageAt?.toISOString() ?? "",
-        lastMessagePreview: msgs[0]
-          ? msgs[0].body?.slice(0, 60) + (msgs[0].body.length > 60 ? "…" : "")
+        lastMessagePreview: body
+          ? body.slice(0, 60) + (body.length > 60 ? "…" : "")
           : null,
         messageCount: count,
       });
@@ -400,18 +431,47 @@ export async function getConversationsForParent(
       studentDocs.map((s) => [s._id?.toString() ?? "", s.name ?? "Student"])
     );
 
+    const convoIds = convoDocs
+      .map((c) => c._id?.toString())
+      .filter((id): id is string => Boolean(id));
+
+    const [lastMsgDocs, countDocs] =
+      convoIds.length > 0
+        ? await Promise.all([
+            messages
+              .aggregate<{ _id: string; body: string }>([
+                { $match: { conversationId: { $in: convoIds } } },
+                { $sort: { createdAt: -1 } },
+                {
+                  $group: {
+                    _id: "$conversationId",
+                    body: { $first: "$body" },
+                  },
+                },
+              ])
+              .toArray(),
+            messages
+              .aggregate<{ _id: string; count: number }>([
+                { $match: { conversationId: { $in: convoIds } } },
+                { $group: { _id: "$conversationId", count: { $sum: 1 } } },
+              ])
+              .toArray(),
+          ])
+        : [[], []];
+
+    const lastMsgMap = new Map(
+      lastMsgDocs.map((d) => [d._id, d.body])
+    );
+    const countMap = new Map(countDocs.map((d) => [d._id, d.count]));
+
     const result: ParentConversationSummary[] = [];
     for (const convo of convoDocs) {
       const other = (convo.participantIds ?? []).find((id) => id !== guardianId);
       if (!other || !convo.studentId) continue;
 
       const convoId = convo._id?.toString() ?? "";
-      const lastMsgs = await messages
-        .find({ conversationId: convoId })
-        .sort({ createdAt: -1 })
-        .limit(1)
-        .toArray();
-      const count = await messages.countDocuments({ conversationId: convoId });
+      const body = lastMsgMap.get(convoId);
+      const count = countMap.get(convoId) ?? 0;
 
       result.push({
         conversationId: convoId,
@@ -419,9 +479,8 @@ export async function getConversationsForParent(
         studentName: studentNameMap.get(convo.studentId) ?? "Student",
         teacherName: teacherNameMap.get(other) ?? "Teacher",
         lastMessageAt: convo.lastMessageAt?.toISOString() ?? "",
-        lastMessagePreview: lastMsgs[0]
-          ? lastMsgs[0].body?.slice(0, 60) +
-            (lastMsgs[0].body.length > 60 ? "…" : "")
+        lastMessagePreview: body
+          ? body.slice(0, 60) + (body.length > 60 ? "…" : "")
           : null,
         messageCount: count,
       });

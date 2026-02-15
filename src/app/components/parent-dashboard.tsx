@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -352,6 +352,7 @@ export function ParentDashboard({
   const [unsubmittingSlipId, setUnsubmittingSlipId] = useState<string | null>(null);
   const [openMenuClassId, setOpenMenuClassId] = useState<string | null>(null);
   const [expandedInboxId, setExpandedInboxId] = useState<string | null>(null);
+  const [inboxSlipFileSelected, setInboxSlipFileSelected] = useState(false);
   const [readItemIds, setReadItemIds] = useState<Set<string>>(() => new Set());
   const [completedItemIds, setCompletedItemIds] = useState<Set<string>>(
     () => new Set()
@@ -363,10 +364,16 @@ export function ParentDashboard({
   >(null);
   const router = useRouter();
 
-  const taskMap = new Map(permissionSlipTasks.map((t) => [t.id, t]));
+  const taskMap = useMemo(
+    () => new Map(permissionSlipTasks.map((t) => [t.id, t])),
+    [permissionSlipTasks]
+  );
 
   useEffect(() => {
-    if (!expandedInboxId) return;
+    if (!expandedInboxId) {
+      setInboxSlipFileSelected(false);
+      return;
+    }
     const item = inboxItems.find((i) => i.id === expandedInboxId);
     const isInformational =
       item &&
@@ -773,7 +780,7 @@ export function ParentDashboard({
                           Due by {formatDueDate(item.permissionSlipDueDate)} (sign and submit payment)
                         </p>
                       )}
-                      {item.status !== "completed" && task && (item.cost ?? 0) > 0 && (
+                      {item.status !== "completed" && task && (item.cost ?? 0) > 0 && !item.requiresPermissionSlip && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
                           <p className="mb-3 text-sm font-medium text-zinc-700">
                             How will you pay the ${item.cost!.toFixed(2)}?
@@ -892,12 +899,19 @@ export function ParentDashboard({
                                 accept=".pdf,application/pdf"
                                 required
                                 disabled={!!uploadingSlipId}
+                                onChange={(e) =>
+                                  setInboxSlipFileSelected(
+                                    !!e.target.files?.[0]
+                                  )
+                                }
                                 className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200"
                               />
                               <button
                                 type="submit"
-                                disabled={!!uploadingSlipId}
-                                className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                disabled={
+                                  !!uploadingSlipId || !inboxSlipFileSelected
+                                }
+                                className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:pointer-events-none disabled:opacity-50"
                               >
                                 {uploadingSlipId === task.id
                                   ? "Uploading..."

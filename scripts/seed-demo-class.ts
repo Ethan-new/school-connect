@@ -41,6 +41,17 @@ async function main() {
   const inTwoWeeks = new Date();
   inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
 
+  const fieldTripDate = nextWeek.toISOString().slice(0, 10);
+  const dayBefore = (dateStr: string) => {
+    const d = new Date(dateStr + "T12:00:00");
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Minimal valid PDF (blank page) for permission form
+  const MINIMAL_PDF_BASE64 =
+    "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDAxMTUgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyMDYKJSVFT0YK";
+
   await calendarEvents.insertMany([
     {
       schoolId,
@@ -50,6 +61,10 @@ async function main() {
       startAt: nextWeek.toISOString(),
       endAt: new Date(nextWeek.getTime() + 4 * 60 * 60 * 1000).toISOString(),
       visibility: "class",
+      requiresPermissionSlip: true,
+      cost: 0,
+      permissionSlipDueDate: dayBefore(fieldTripDate),
+      permissionFormPdfBase64: MINIMAL_PDF_BASE64,
       createdAt: new Date(),
     },
     {

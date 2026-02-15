@@ -126,7 +126,10 @@ export async function getReportCardsForStudent(
       .sort({ term: -1, createdAt: -1 })
       .toArray();
 
-    return cards.map((c) => serializeReportCard(c)!).filter(Boolean);
+    return cards.flatMap((c) => {
+      const s = serializeReportCard(c);
+      return s ? [s] : [];
+    });
   } catch (error) {
     console.error("[getReportCardsForStudent] Failed:", error);
     return [];

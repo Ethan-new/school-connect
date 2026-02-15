@@ -94,6 +94,10 @@ async function main() {
   const interviewDate = nextWeekday(inTwoWeeks);
   const assemblyDate = nextWeekday(inThreeWeeks);
 
+  // Minimal valid PDF (blank page) for permission form - parents can sign when they complete the slip
+  const MINIMAL_PDF_BASE64 =
+    "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDAxMTUgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA0Ci9Sb290IDEgMCBSCj4+CnN0YXJ0eHJlZgoyMDYKJSVFT0YK";
+
   const events = [
     {
       schoolId,
@@ -106,6 +110,7 @@ async function main() {
       requiresPermissionSlip: true,
       cost: 15,
       permissionSlipDueDate: dayBefore(fieldTripDate),
+      permissionFormPdfBase64: MINIMAL_PDF_BASE64,
       createdAt: now,
     },
     {

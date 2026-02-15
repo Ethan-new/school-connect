@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createEventAction, uploadEventPermissionFormAction } from "@/app/actions";
 import type { TeacherClassSerialized } from "@/lib/teacher-dashboard";
@@ -33,12 +33,16 @@ export function AddEventModal({ classes, isOpen, onClose }: AddEventModalProps) 
   const permissionFormInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  const scopeOptions = classes.map((c) => ({
-    value: c.id,
-    label: `${c.name} (${c.schoolName})`,
-    schoolId: c.schoolId,
-    classId: c.id as string,
-  }));
+  const scopeOptions = useMemo(
+    () =>
+      classes.map((c) => ({
+        value: c.id,
+        label: `${c.name} (${c.schoolName})`,
+        schoolId: c.schoolId,
+        classId: c.id as string,
+      })),
+    [classes]
+  );
 
   useEffect(() => {
     if (isOpen && classes.length > 0) {

@@ -588,62 +588,74 @@ export async function getEventPermissionSlipStatus(
   if (validIds.length === 0) return [];
 
   try {
-    const slips = await eventPermissionSlipsCollection();
-    const events = await calendarEventsCollection();
-    const classes = await classesCollection();
-    const students = await studentsCollection();
-    const users = await usersCollection();
+    const [slips, events, classes, students, users] = [
+      eventPermissionSlipsCollection(),
+      calendarEventsCollection(),
+      classesCollection(),
+      studentsCollection(),
+      usersCollection(),
+    ];
 
-    const allSlips = await slips
-      .find({ eventId: { $in: validIds } })
-      .toArray();
+    const [allSlips, eventDocs] = await Promise.all([
+      slips.then((c) => c.find({ eventId: { $in: validIds } }).toArray()),
+      events.then((c) =>
+        c.find({
+          _id: { $in: validIds.map((id) => new ObjectId(id)) },
+        }).toArray()
+      ),
+    ]);
 
-    const eventDocs = await events
-      .find({
-        _id: { $in: validIds.map((id) => new ObjectId(id)) },
-      })
-      .toArray();
     const eventMap = new Map(
       eventDocs.map((e) => [e._id?.toString(), e])
     );
+    const classIds = [
+      ...new Set(
+        eventDocs.flatMap((e) => {
+          const id = e.classId;
+          return id &&
+            typeof id === "string" &&
+            /^[a-f0-9]{24}$/i.test(id)
+            ? [id]
+            : [];
+        })
+      ),
+    ];
 
-    const classIds = [...new Set(eventDocs.map((e) => e.classId).filter(Boolean))];
-    const classDocs = await classes
-      .find({
-        _id: {
-          $in: classIds
-            .filter((id): id is string => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id))
-            .map((id) => new ObjectId(id)),
-        },
-      })
-      .toArray();
+    const classDocs = await classes.then((c) =>
+      c.find({ _id: { $in: classIds.map((id) => new ObjectId(id)) } }).toArray()
+    );
     const classMap = new Map(classDocs.map((c) => [c._id?.toString(), c]));
 
-    const studentIds = [...new Set(classDocs.flatMap((c) => c.studentIds ?? []))];
-    const studentDocs =
+    const studentIds = [...new Set(classDocs.flatMap((c) => c.studentIds ?? []))].filter(
+      (id) => /^[a-f0-9]{24}$/i.test(id)
+    );
+    const guardianIds = [...new Set(allSlips.map((s) => s.guardianId))];
+
+    const [studentDocs, guardianDocs] = await Promise.all([
       studentIds.length > 0
-        ? await students
-            .find({
-              _id: {
-                $in: studentIds
-                  .filter((id) => /^[a-f0-9]{24}$/i.test(id))
-                  .map((id) => new ObjectId(id)),
-              },
-            })
-            .toArray()
-        : [];
+        ? students.then((c) =>
+            c.find({
+              _id: { $in: studentIds.map((id) => new ObjectId(id)) },
+            }).toArray()
+          )
+        : Promise.resolve([]),
+      guardianIds.length > 0
+        ? users.then((c) => c.find({ auth0Id: { $in: guardianIds } }).toArray())
+        : Promise.resolve([]),
+    ]);
+
     const studentMap = new Map(
       studentDocs.map((s) => [s._id?.toString(), s])
     );
-
-    const guardianIds = [...new Set(allSlips.map((s) => s.guardianId))];
-    const guardianDocs =
-      guardianIds.length > 0
-        ? await users.find({ auth0Id: { $in: guardianIds } }).toArray()
-        : [];
     const guardianMap = new Map(
       guardianDocs.map((u) => [u.auth0Id, u.name ?? u.email ?? "Unknown"])
     );
+
+    const STATUS_ORDER: Record<"signed" | "pending" | "no_parent", number> = {
+      signed: 0,
+      pending: 1,
+      no_parent: 2,
+    };
 
     const result: EventPermissionStatus[] = [];
 
@@ -657,6 +669,8 @@ export async function getEventPermissionSlipStatus(
       const eventSlips = allSlips.filter((s) => s.eventId === eventId);
       const classStudentIds = cls.studentIds ?? [];
       const studentStatuses: EventPermissionStatusByStudent[] = [];
+      let pendingCount = 0;
+      let signedCount = 0;
 
       for (const studentId of classStudentIds) {
         const student = studentMap.get(studentId);
@@ -668,11 +682,15 @@ export async function getEventPermissionSlipStatus(
             studentName: student?.name ?? "Unknown",
             status: "no_parent",
           });
+          pendingCount++;
           continue;
         }
 
         const signedSlip = studentSlips.find((s) => s.status === "signed");
         const status: "pending" | "signed" = signedSlip ? "signed" : "pending";
+        if (status === "signed") signedCount++;
+        else pendingCount++;
+
         const signedBy = signedSlip
           ? cls.teacherIds?.includes(signedSlip.guardianId)
             ? "Parent"
@@ -698,13 +716,8 @@ export async function getEventPermissionSlipStatus(
         });
       }
 
-      const statusOrder: Record<"signed" | "pending" | "no_parent", number> = {
-        signed: 0,
-        pending: 1,
-        no_parent: 2,
-      };
       const sortedStudents = [...studentStatuses].sort(
-        (a, b) => statusOrder[a.status] - statusOrder[b.status]
+        (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
       );
 
       result.push({
@@ -714,10 +727,8 @@ export async function getEventPermissionSlipStatus(
         classId: cls._id?.toString() ?? event.classId ?? "",
         className: cls.name,
         students: sortedStudents,
-        pendingCount: studentStatuses.filter(
-          (s) => s.status === "pending" || s.status === "no_parent"
-        ).length,
-        signedCount: studentStatuses.filter((s) => s.status === "signed").length,
+        pendingCount,
+        signedCount,
       });
     }
 

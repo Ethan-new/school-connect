@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type {
   TeacherClassSerialized,
@@ -719,6 +719,10 @@ function StudentRow({
 }) {
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
   const [linkSearchQuery, setLinkSearchQuery] = useState("");
+  const guardianMap = useMemo(
+    () => new Map(guardians.map((g) => [g.id, g])),
+    [guardians]
+  );
 
   const unlinkedGuardians = guardians.filter(
     (g) => !student.guardianIds.includes(g.id)
@@ -738,7 +742,7 @@ function StudentRow({
   }
 
   function handleUnlink(guardianId: string) {
-    const g = guardians.find((x) => x.id === guardianId);
+    const g = guardianMap.get(guardianId);
     const name = g?.name ?? "this parent";
     if (!confirm(`Remove link between ${student.name} and ${name}? This can be undone by linking again.`)) return;
     onUnlink(guardianId);
@@ -758,7 +762,7 @@ function StudentRow({
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {student.guardianIds.map((gid) => {
-          const g = guardians.find((x) => x.id === gid);
+          const g = guardianMap.get(gid);
           return (
             <button
               key={gid}
@@ -851,12 +855,12 @@ export function TeacherDashboard({
   const [slotsByClass, setSlotsByClass] = useState(interviewSlotsByClass);
   const [permissionSlipStatusState, setPermissionSlipStatusState] =
     useState(permissionSlipStatus);
+
   useEffect(() => {
     setClassesState(classes);
-  }, [classes]);
-  useEffect(() => {
     setSlotsByClass(interviewSlotsByClass);
-  }, [interviewSlotsByClass]);
+    setPermissionSlipStatusState(permissionSlipStatus);
+  }, [classes, interviewSlotsByClass, permissionSlipStatus]);
 
   function handleLinkGuardian(classId: string, studentId: string, guardianId: string) {
     const guardian = classesState.find((c) => c.id === classId)?.guardians?.find((g) => g.id === guardianId);
@@ -917,11 +921,10 @@ export function TeacherDashboard({
       }
     });
   }
-  useEffect(() => {
-    setPermissionSlipStatusState(permissionSlipStatus);
-  }, [permissionSlipStatus]);
-  const statusByEvent = new Map(
-    permissionSlipStatusState.map((s) => [s.eventId, s])
+
+  const statusByEvent = useMemo(
+    () => new Map(permissionSlipStatusState.map((s) => [s.eventId, s])),
+    [permissionSlipStatusState]
   );
   const firstName = userName?.split(/\s+/)[0] ?? "there";
   const [activeTab, setActiveTab] = useState<Tab>("classes");
@@ -946,6 +949,7 @@ export function TeacherDashboard({
   const [uploadingManualSlipFor, setUploadingManualSlipFor] = useState<
     string | null
   >(null);
+  const [manualSlipFileSelected, setManualSlipFileSelected] = useState(false);
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<{
     id: string;
     name: string;
@@ -988,6 +992,9 @@ export function TeacherDashboard({
     setPermissionFormFileSelected(false);
     setPermissionFormPreviewExpanded(false);
   }, [selectedPermissionSlipEventId]);
+  useEffect(() => {
+    if (!selectedSubmissionStudent) setManualSlipFileSelected(false);
+  }, [selectedSubmissionStudent]);
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans">
@@ -2990,7 +2997,18 @@ export function TeacherDashboard({
                                         }}
                                         className="flex flex-wrap items-center gap-2"
                                       >
-                                        <input type="file" name="pdf" accept=".pdf,application/pdf" disabled={!!uploadingManualSlipFor} className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200" />
+                                        <input
+                                          type="file"
+                                          name="pdf"
+                                          accept=".pdf,application/pdf"
+                                          disabled={!!uploadingManualSlipFor}
+                                          onChange={(e) =>
+                                            setManualSlipFileSelected(
+                                              !!e.target.files?.[0]
+                                            )
+                                          }
+                                          className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200"
+                                        />
                                         {(event.cost != null && event.cost > 0) && (
                                           <>
                                             <label className="flex items-center gap-1.5 text-sm">
@@ -3003,7 +3021,14 @@ export function TeacherDashboard({
                                             </label>
                                           </>
                                         )}
-                                        <button type="submit" disabled={!!uploadingManualSlipFor} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                                        <button
+                                          type="submit"
+                                          disabled={
+                                            !!uploadingManualSlipFor ||
+                                            !manualSlipFileSelected
+                                          }
+                                          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:pointer-events-none disabled:opacity-50"
+                                        >
                                           {uploadingManualSlipFor === selectedSubmissionStudent.studentId ? "Uploading..." : "Upload signed PDF"}
                                         </button>
                                       </form>
