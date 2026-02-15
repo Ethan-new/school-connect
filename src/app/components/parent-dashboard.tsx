@@ -341,21 +341,21 @@ export function ParentDashboard({
   const taskMap = new Map(permissionSlipTasks.map((t) => [t.id, t]));
 
   useEffect(() => {
-    if (expandedInboxId) {
-      const item = inboxItems.find((i) => i.id === expandedInboxId);
-      const isInformational =
-        item &&
-        !item.requiresPermissionSlip &&
-        (item.cost == null || item.cost === 0);
-      setReadItemIds((prev) => new Set(prev).add(expandedInboxId));
-      if (isInformational) {
-        setCompletedItemIds((prev) => new Set(prev).add(expandedInboxId));
-      }
-      markInboxItemAsReadAction(expandedInboxId).then((res) => {
-        if (res.success) router.refresh();
-      });
+    if (!expandedInboxId) return;
+    const item = inboxItems.find((i) => i.id === expandedInboxId);
+    const isInformational =
+      item &&
+      !item.requiresPermissionSlip &&
+      (item.cost == null || item.cost === 0);
+    setReadItemIds((prev) => new Set(prev).add(expandedInboxId));
+    if (isInformational) {
+      setCompletedItemIds((prev) => new Set(prev).add(expandedInboxId));
     }
-  }, [expandedInboxId, router, inboxItems]);
+    markInboxItemAsReadAction(expandedInboxId).then((res) => {
+      if (res.success) router.refresh();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- inboxItems excluded to prevent re-render loop (router.refresh updates it, causing effect to re-run)
+  }, [expandedInboxId]);
 
   async function handlePaymentOnly(slipId: string, paymentMethod: "online" | "cash") {
     if (uploadingSlipId) return;

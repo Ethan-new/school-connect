@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { updateEventAction, uploadEventPermissionFormAction } from "@/app/actions";
 import type { CalendarEventSerialized } from "@/lib/teacher-dashboard";
@@ -41,7 +41,9 @@ export function EditEventModal({
   const [error, setError] = useState<string | null>(null);
   const [isUploadingForm, setIsUploadingForm] = useState(false);
   const [hasPermissionForm, setHasPermissionForm] = useState(false);
+  const [hasFileSelected, setHasFileSelected] = useState(false);
   const [hasSeparateDueDate, setHasSeparateDueDate] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [permissionSlipDueDate, setPermissionSlipDueDate] = useState("");
   const router = useRouter();
 
@@ -70,6 +72,7 @@ export function EditEventModal({
           : ""
       );
       setHasPermissionForm(event.hasPermissionForm ?? false);
+      setHasFileSelected(false);
       setHasSeparateDueDate(Boolean(event.permissionSlipDueDate));
       setPermissionSlipDueDate(event.permissionSlipDueDate ?? start.date);
       setError(null);
@@ -110,21 +113,24 @@ export function EditEventModal({
     }
   }
 
-  async function handleUploadForm(e: React.FormEvent<HTMLFormElement>) {
+  async function handleUploadForm(e: React.MouseEvent) {
     e.preventDefault();
-    if (!event) return;
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    if (!formData.get("pdf") || (formData.get("pdf") as File).size === 0) {
+    e.stopPropagation();
+    if (!event || !hasFileSelected || !fileInputRef.current?.files?.[0]) return;
+    const file = fileInputRef.current.files[0];
+    if (file.size === 0) {
       setError("Please select a PDF file");
       return;
     }
     setIsUploadingForm(true);
     setError(null);
+    const formData = new FormData();
+    formData.append("pdf", file);
     const { success, error: err } = await uploadEventPermissionFormAction(event.id, formData);
     setIsUploadingForm(false);
     if (success) {
-      form.reset();
+      fileInputRef.current.value = "";
+      setHasFileSelected(false);
       setHasPermissionForm(true);
       router.refresh();
     } else if (err) {
@@ -325,25 +331,24 @@ export function EditEventModal({
                       No form uploaded — upload a PDF for parents to sign
                     </p>
                   )}
-                  <form
-                    onSubmit={handleUploadForm}
-                    className="mt-3 flex flex-wrap items-center gap-2"
-                  >
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <input
+                      ref={fileInputRef}
                       type="file"
-                      name="pdf"
                       accept=".pdf,application/pdf"
                       disabled={isUploadingForm || isPending}
-                      className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200"
+                      onChange={(e) => setHasFileSelected(Boolean(e.target.files?.[0]))}
+                      className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-800"
                     />
                     <button
-                      type="submit"
-                      disabled={isUploadingForm || isPending}
-                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                      type="button"
+                      onClick={handleUploadForm}
+                      disabled={isUploadingForm || isPending || !hasFileSelected}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white disabled:pointer-events-none disabled:opacity-50"
                     >
                       {isUploadingForm ? "Uploading..." : hasPermissionForm ? "Replace form" : "Upload form"}
                     </button>
-                  </form>
+                  </div>
                   <p className="mt-2 text-xs text-zinc-500">
                     Parents will download this PDF to sign and return.
                   </p>
@@ -419,7 +424,7 @@ export function EditEventModal({
                   type="button"
                   onClick={addOccurrenceDate}
                   disabled={isPending || !newDate}
-                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
                 >
                   Add
                 </button>
@@ -440,7 +445,7 @@ export function EditEventModal({
                         type="button"
                         onClick={() => removeOccurrenceDate(d)}
                         disabled={isPending}
-                        className="text-zinc-500 hover:text-zinc-700"
+                        className="text-zinc-500"
                         aria-label="Remove"
                       >
                         ×
@@ -538,14 +543,14 @@ export function EditEventModal({
               type="button"
               onClick={handleClose}
               disabled={isPending}
-              className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {isPending ? "Saving..." : "Save"}
             </button>

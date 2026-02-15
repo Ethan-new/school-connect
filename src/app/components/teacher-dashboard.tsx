@@ -2428,11 +2428,9 @@ export function TeacherDashboard({
                       <button
                         type="submit"
                         disabled={
-                          !!uploadingFormEventId ||
-                          (event.hasPermissionForm &&
-                            !permissionFormFileSelected)
+                          !!uploadingFormEventId || !permissionFormFileSelected
                         }
-                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-amber-600"
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white disabled:pointer-events-none disabled:opacity-50"
                       >
                         {isUploading
                           ? "Uploading..."
