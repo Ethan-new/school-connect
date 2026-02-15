@@ -2485,92 +2485,37 @@ export function TeacherDashboard({
 
                   {(event.requiresPermissionSlip || (event.cost != null && event.cost > 0)) && (
                   <>
-                  {event.requiresPermissionSlip && (
+                  {event.requiresPermissionSlip && event.hasPermissionForm && (
                   <div className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-4">
-                    <h3 className="text-sm font-semibold text-zinc-800">
-                      Permission form
-                    </h3>
-                    {event.hasPermissionForm ? (
-                      <p className="mt-1 text-sm text-emerald-600">
-                        Form uploaded ✓
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-sm text-amber-600">
-                        No form uploaded — upload a PDF for parents to sign
-                      </p>
-                    )}
-                    <form
-                      onSubmit={handleUploadForm}
-                      className="mt-3 flex flex-wrap items-center gap-2"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPermissionFormPreviewExpanded(
+                          !permissionFormPreviewExpanded
+                        )
+                      }
+                      className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                     >
-                      <input
-                        type="file"
-                        name="pdf"
-                        accept=".pdf,application/pdf"
-                        disabled={!!uploadingFormEventId}
-                        onChange={(e) =>
-                          setPermissionFormFileSelected(
-                            !!e.target.files?.[0]
-                          )
-                        }
-                        className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200"
-                      />
-                      <button
-                        type="submit"
-                        disabled={
-                          !!uploadingFormEventId || !permissionFormFileSelected
-                        }
-                        className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white disabled:pointer-events-none disabled:opacity-50"
-                      >
-                        {isUploading
-                          ? "Uploading..."
-                          : event.hasPermissionForm
-                            ? "Replace form"
-                            : "Upload form"}
-                      </button>
-                    </form>
-                    <p className="mt-2 text-xs text-zinc-500">
-                      Parents will download this PDF to sign and return.
-                    </p>
-                    <div className="mt-4">
-                      {event.hasPermissionForm ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPermissionFormPreviewExpanded(
-                                !permissionFormPreviewExpanded
-                              )
-                            }
-                            className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                          >
-                            <span>
-                              {permissionFormPreviewExpanded
-                                ? "Hide form preview"
-                                : "Show form preview"}
-                            </span>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-transform ${permissionFormPreviewExpanded ? "rotate-180" : ""}`}>
-                              <path d="m6 9 6 6 6-6" />
-                            </svg>
-                          </button>
-                          {permissionFormPreviewExpanded && (
-                            <div className="mt-2">
-                              <div className="h-[400px] overflow-hidden rounded-lg border border-zinc-200 bg-white">
-                                <iframe
-                                  src={`/api/event/${event.id}/permission-form`}
-                                  title="Permission form preview"
-                                  className="h-full w-full"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-xs text-zinc-500">
-                          Upload a form above to preview it.
-                        </p>
-                      )}
-                    </div>
+                      <span>
+                        {permissionFormPreviewExpanded
+                          ? "Hide form preview"
+                          : "Show form preview"}
+                      </span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 transition-transform ${permissionFormPreviewExpanded ? "rotate-180" : ""}`}>
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {permissionFormPreviewExpanded && (
+                      <div className="mt-2">
+                        <div className="h-[400px] overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                          <iframe
+                            src={`/api/event/${event.id}/permission-form`}
+                            title="Permission form preview"
+                            className="h-full w-full"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   )}
 
