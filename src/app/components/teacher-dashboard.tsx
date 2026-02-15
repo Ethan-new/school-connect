@@ -135,14 +135,16 @@ function TeacherCalendarView({
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string> | null>(null);
 
   const filteredEvents =
-    selectedClassIds === null || selectedClassIds.size === 0
+    selectedClassIds === null
       ? events
-      : events.filter(
-          (e) => !e.classId || selectedClassIds.has(e.classId)
-        );
+      : selectedClassIds.size === 0
+        ? []
+        : events.filter(
+            (e) => !e.classId || selectedClassIds.has(e.classId)
+          );
 
   const selectedCount =
-    selectedClassIds === null || selectedClassIds.size === 0
+    selectedClassIds === null
       ? classes.length
       : selectedClassIds.size;
 
@@ -158,8 +160,8 @@ function TeacherCalendarView({
     });
   }
 
-  function toggleAll() {
-    setSelectedClassIds((prev) => (prev === null ? new Set() : null));
+  function selectAllClasses() {
+    setSelectedClassIds(null);
   }
 
   const year = viewDate.getFullYear();
@@ -184,7 +186,22 @@ function TeacherCalendarView({
     days.push(new Date(year, month, d));
   }
 
-  const dateKey = (d: Date) => d.toISOString().slice(0, 10);
+  const dateKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const eventSortKey = (ev: CalendarEventSerialized, cellDateStr: string): number => {
+    let timePart = "12:00:00";
+    if (ev.startAt.includes("T")) {
+      const afterT = ev.startAt.slice(11);
+      const match = afterT.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (match) {
+        const [, h = "12", m = "00", s] = match;
+        timePart = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${(s ?? "00").padStart(2, "0")}`;
+      }
+    }
+    const sortStr = `${cellDateStr}T${timePart}`;
+    const ts = new Date(sortStr).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  };
   const eventsByDate = new Map<string, CalendarEventSerialized[]>();
   for (const event of filteredEvents) {
     const dates: string[] =
@@ -303,7 +320,7 @@ function TeacherCalendarView({
                   <button
                     type="button"
                     onClick={() => {
-                      toggleAll();
+                      selectAllClasses();
                     }}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
                   >
@@ -373,7 +390,10 @@ function TeacherCalendarView({
               return <div key={`pad-${i}`} className="min-h-[80px] bg-zinc-50/50" />;
             }
             const key = dateKey(date);
-            const dayEvents = eventsByDate.get(key) ?? [];
+            const dayEventsRaw = eventsByDate.get(key) ?? [];
+            const dayEvents = [...dayEventsRaw].sort(
+              (a, b) => eventSortKey(a, key) - eventSortKey(b, key)
+            );
             const isToday =
               date.getDate() === today.getDate() &&
               date.getMonth() === today.getMonth() &&

@@ -89,8 +89,10 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function CalendarView({
   events,
+  onEventClick,
 }: {
   events: CalendarEventSerialized[];
+  onEventClick?: (eventId: string) => void;
 }) {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -110,6 +112,20 @@ function CalendarView({
     setViewDate(new Date(year, month + 1, 1));
 
   const eventsByDate = new Map<string, CalendarEventSerialized[]>();
+  const eventSortKey = (ev: CalendarEventSerialized, cellDateStr: string): number => {
+    let timePart = "12:00:00";
+    if (ev.startAt.includes("T")) {
+      const afterT = ev.startAt.slice(11);
+      const match = afterT.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (match) {
+        const [, h = "12", m = "00", s] = match;
+        timePart = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${(s ?? "00").padStart(2, "0")}`;
+      }
+    }
+    const sortStr = `${cellDateStr}T${timePart}`;
+    const ts = new Date(sortStr).getTime();
+    return Number.isNaN(ts) ? 0 : ts;
+  };
   for (const event of events) {
     const dates: string[] =
       event.occurrenceDates && event.occurrenceDates.length > 1
@@ -177,7 +193,11 @@ function CalendarView({
                 />
               );
             }
-            const dayEvents = eventsByDate.get(cell.toString()) ?? [];
+            const cellDateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
+            const dayEventsRaw = eventsByDate.get(cell.toString()) ?? [];
+            const dayEvents = [...dayEventsRaw].sort(
+              (a, b) => eventSortKey(a, cellDateStr) - eventSortKey(b, cellDateStr)
+            );
             const isToday =
               year === today.getFullYear() &&
               month === today.getMonth() &&
@@ -200,12 +220,14 @@ function CalendarView({
                 </span>
                 <div className="mt-1 space-y-1">
                   {dayEvents.map((ev) => (
-                    <div
+                    <button
                       key={ev.id}
-                      className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900 line-clamp-2"
+                      type="button"
+                      onClick={() => onEventClick?.(ev.id)}
+                      className="w-full truncate rounded bg-amber-100 px-1.5 py-0.5 text-left text-xs text-amber-900 line-clamp-2 transition-colors hover:bg-amber-200"
                     >
                       {ev.title}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -336,6 +358,9 @@ export function ParentDashboard({
   );
   const [selectedMessageConversation, setSelectedMessageConversation] =
     useState<ParentConversationSummary | null>(null);
+  const [selectedCalendarEventId, setSelectedCalendarEventId] = useState<
+    string | null
+  >(null);
   const router = useRouter();
 
   const taskMap = new Map(permissionSlipTasks.map((t) => [t.id, t]));
@@ -1013,9 +1038,122 @@ export function ParentDashboard({
         {/* Calendar tab */}
         {activeTab === "calendar" && (
           <section>
-            <CalendarView events={upcomingEvents} />
+            <CalendarView
+              events={upcomingEvents}
+              onEventClick={(eventId) => setSelectedCalendarEventId(eventId)}
+            />
           </section>
         )}
+
+        {/* Event detail modal - from Calendar */}
+        {selectedCalendarEventId && (() => {
+          const event = upcomingEvents.find(
+            (e) => e.id === selectedCalendarEventId
+          );
+          const task = permissionSlipTasks.find(
+            (t) => t.eventId === selectedCalendarEventId
+          );
+          if (!event) return null;
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setSelectedCalendarEventId(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="parent-event-modal-title"
+            >
+              <div
+                className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-4">
+                  <h2
+                    id="parent-event-modal-title"
+                    className="text-lg font-semibold text-zinc-900"
+                  >
+                    {event.title}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCalendarEventId(null)}
+                    className="rounded p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                    aria-label="Close"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-4 px-6 py-5">
+                  {event.classId &&
+                    classes.find((c) => c.id === event.classId)?.name && (
+                      <p className="text-sm text-zinc-500">
+                        {
+                          classes.find((c) => c.id === event.classId)?.name
+                        }
+                      </p>
+                    )}
+                  <div className="text-sm text-zinc-600">
+                    {event.occurrenceDates &&
+                    event.occurrenceDates.length > 1 ? (
+                      <>
+                        <span>
+                          {formatEventTimeRange(event.startAt, event.endAt).split(
+                            " · "
+                          )[1]}{" "}
+                          (each date)
+                        </span>
+                        <span className="mt-2 block font-medium text-zinc-700">
+                          All {event.occurrenceDates.length} dates:
+                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {event.occurrenceDates.map((d) => (
+                            <span
+                              key={d}
+                              className="inline-flex rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700"
+                            >
+                              {new Date(
+                                d + "T12:00:00"
+                              ).toLocaleDateString("en-US", {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      formatEventTimeRange(event.startAt, event.endAt)
+                    )}
+                  </div>
+                  {event.description && (
+                    <p className="text-sm text-zinc-500">{event.description}</p>
+                  )}
+                  {(task?.cost ?? 0) > 0 && (
+                    <p className="text-sm font-medium text-zinc-700">
+                      Cost: ${(task?.cost ?? 0).toFixed(2)}
+                    </p>
+                  )}
+                  {task && (
+                    <p className="text-sm text-zinc-600">
+                      Complete sign-up or payment in the Inbox tab.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Report cards tab */}
         {activeTab === "reportcards" && (
