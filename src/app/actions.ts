@@ -12,7 +12,9 @@ import {
   uploadSignedPermissionSlip,
   submitPaymentMethodOnly,
   unsubmitPermissionSlip,
+  unsubmitPermissionSlipForTeacher,
   uploadPermissionSlipForStudent,
+  recordPaymentMethodForStudent,
   markCashReceived,
   markInboxItemAsRead,
 } from "@/lib/event-permission-slips";
@@ -194,6 +196,20 @@ export async function unsubmitSlipAction(
     : { success: false, error: result.error };
 }
 
+export async function unsubmitSlipForTeacherAction(
+  slipId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const result = await unsubmitPermissionSlipForTeacher(session.user.sub, slipId);
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error };
+}
+
 export async function uploadPermissionSlipForStudentAction(
   eventId: string,
   classId: string,
@@ -232,6 +248,29 @@ export async function uploadPermissionSlipForStudentAction(
     studentId,
     base64,
     validPayment
+  );
+  return result.success
+    ? { success: true }
+    : { success: false, error: result.error };
+}
+
+export async function recordPaymentMethodForStudentAction(
+  eventId: string,
+  classId: string,
+  studentId: string,
+  paymentMethod: "online" | "cash"
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth0.getSession();
+  if (!session?.user?.sub) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  const result = await recordPaymentMethodForStudent(
+    session.user.sub,
+    eventId,
+    classId,
+    studentId,
+    paymentMethod
   );
   return result.success
     ? { success: true }

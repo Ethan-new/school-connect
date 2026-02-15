@@ -773,10 +773,13 @@ export function ParentDashboard({
                           Due by {formatDueDate(item.permissionSlipDueDate)} (sign and submit payment)
                         </p>
                       )}
-                      {item.status !== "completed" && task && !item.requiresPermissionSlip && (item.cost ?? 0) > 0 && (
+                      {item.status !== "completed" && task && (item.cost ?? 0) > 0 && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
                           <p className="mb-3 text-sm font-medium text-zinc-700">
                             How will you pay the ${item.cost!.toFixed(2)}?
+                          </p>
+                          <p className="mb-3 text-xs text-zinc-500">
+                            No document upload required — just select your payment method below.
                           </p>
                           <div className="flex flex-col gap-2">
                             <button
@@ -803,7 +806,7 @@ export function ParentDashboard({
                           )}
                         </div>
                       )}
-                      {item.status !== "completed" && task && item.requiresPermissionSlip && !item.hasPermissionForm && (
+                      {item.status !== "completed" && task && item.requiresPermissionSlip && !item.hasPermissionForm && (item.cost ?? 0) === 0 && (
                         <p className="text-sm text-zinc-500">
                           Your teacher is still preparing the permission form.
                           Please check back later.

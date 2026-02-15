@@ -383,13 +383,6 @@ export async function submitPaymentMethodOnly(
       return { success: false, error: "Event not found" };
     }
 
-    if (event.requiresPermissionSlip) {
-      return {
-        success: false,
-        error: "This event requires a signed permission form. Please upload the PDF.",
-      };
-    }
-
     const effectiveCost = getEventEffectiveCost(event);
     if (!effectiveCost || effectiveCost <= 0) {
       return {
@@ -500,7 +493,12 @@ export async function unsubmitPermissionSlip(
       },
       {
         $set: { status: "pending" },
-        $unset: { signedAt: "", signedPdfBase64: "" },
+        $unset: {
+          signedAt: "",
+          signedPdfBase64: "",
+          paymentMethod: "",
+          cashReceivedAt: "",
+        },
       }
     );
 
@@ -511,6 +509,69 @@ export async function unsubmitPermissionSlip(
     return { success: true };
   } catch (error) {
     console.error("[unsubmitPermissionSlip] Failed:", error);
+    return { success: false, error: "Failed to unsubmit. Please try again." };
+  }
+}
+
+/**
+ * Teacher revokes a signed permission slip so the parent can resubmit.
+ */
+export async function unsubmitPermissionSlipForTeacher(
+  teacherAuth0Id: string,
+  slipId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (!isDbConfigured()) {
+    return { success: false, error: "Database not configured" };
+  }
+
+  try {
+    const slips = await eventPermissionSlipsCollection();
+    const events = await calendarEventsCollection();
+    const classes = await classesCollection();
+
+    const slip = await slips.findOne({ _id: new ObjectId(slipId) });
+    if (!slip || slip.status !== "signed") {
+      return { success: false, error: "Permission slip not found or not yet signed" };
+    }
+
+    const event = await events.findOne({ _id: new ObjectId(slip.eventId) });
+    if (!event) return { success: false, error: "Event not found" };
+
+    let cls: Awaited<ReturnType<typeof classes.findOne>> = null;
+    if (event.classId) {
+      cls = await classes.findOne({ _id: new ObjectId(event.classId) });
+      if (!cls || !cls.teacherIds?.includes(teacherAuth0Id)) {
+        return { success: false, error: "You don't have access to this event" };
+      }
+    } else {
+      const teacherClasses = await classes.find({ teacherIds: teacherAuth0Id }).toArray();
+      const teacherSchoolIds = new Set(teacherClasses.map((c) => c.schoolId));
+      if (!teacherSchoolIds.has(event.schoolId)) {
+        return { success: false, error: "You don't have access to this event" };
+      }
+    }
+
+    const isNoParentSlip = cls && cls.teacherIds?.includes(slip.guardianId);
+    if (isNoParentSlip) {
+      await slips.deleteOne({ _id: new ObjectId(slipId) });
+    } else {
+      await slips.updateOne(
+        { _id: new ObjectId(slipId) },
+        {
+          $set: { status: "pending" },
+          $unset: {
+            signedAt: "",
+            signedPdfBase64: "",
+            paymentMethod: "",
+            cashReceivedAt: "",
+          },
+        }
+      );
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("[unsubmitPermissionSlipForTeacher] Failed:", error);
     return { success: false, error: "Failed to unsubmit. Please try again." };
   }
 }
@@ -637,13 +698,22 @@ export async function getEventPermissionSlipStatus(
         });
       }
 
+      const statusOrder: Record<"signed" | "pending" | "no_parent", number> = {
+        signed: 0,
+        pending: 1,
+        no_parent: 2,
+      };
+      const sortedStudents = [...studentStatuses].sort(
+        (a, b) => statusOrder[a.status] - statusOrder[b.status]
+      );
+
       result.push({
         eventId,
         eventTitle: event.title,
         eventStartAt: event.startAt,
         classId: cls._id?.toString() ?? event.classId ?? "",
         className: cls.name,
-        students: studentStatuses,
+        students: sortedStudents,
         pendingCount: studentStatuses.filter(
           (s) => s.status === "pending" || s.status === "no_parent"
         ).length,
@@ -744,6 +814,90 @@ export async function uploadPermissionSlipForStudent(
   } catch (error) {
     console.error("[uploadPermissionSlipForStudent] Failed:", error);
     return { success: false, error: "Failed to upload. Please try again." };
+  }
+}
+
+/**
+ * Teacher records payment method for a student with no parent (no PDF upload).
+ * Used for cost-only events like pizza day.
+ */
+export async function recordPaymentMethodForStudent(
+  teacherAuth0Id: string,
+  eventId: string,
+  classId: string,
+  studentId: string,
+  paymentMethod: "online" | "cash"
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (!isDbConfigured()) {
+    return { success: false, error: "Database not configured" };
+  }
+
+  try {
+    const classes = await classesCollection();
+    const cls = await classes.findOne({
+      _id: new ObjectId(classId),
+    });
+    if (!cls || !cls.teacherIds?.includes(teacherAuth0Id)) {
+      return { success: false, error: "Class not found or access denied" };
+    }
+    if (!cls.studentIds?.includes(studentId)) {
+      return { success: false, error: "Student not in this class" };
+    }
+
+    const events = await calendarEventsCollection();
+    const event = await events.findOne({
+      _id: new ObjectId(eventId),
+    });
+    if (!event) {
+      return { success: false, error: "Event not found" };
+    }
+    const eventClassId = event.classId ?? undefined;
+    if (eventClassId && eventClassId !== classId) {
+      return { success: false, error: "Event class mismatch" };
+    }
+    const effectiveCost = getEventEffectiveCost(event);
+    if (!effectiveCost || effectiveCost <= 0) {
+      return { success: false, error: "Event has no cost" };
+    }
+
+    const slips = await eventPermissionSlipsCollection();
+    const existingSlip = await slips.findOne({
+      eventId,
+      studentId,
+    });
+    if (existingSlip?.status === "signed") {
+      return { success: false, error: "Already has a submitted slip" };
+    }
+
+    const slipData = {
+      status: "signed" as const,
+      signedAt: new Date(),
+      paymentMethod,
+      guardianId: teacherAuth0Id,
+    };
+
+    if (existingSlip) {
+      await slips.updateOne(
+        { _id: existingSlip._id },
+        { $set: slipData }
+      );
+    } else {
+      await slips.insertOne({
+        eventId,
+        classId,
+        studentId,
+        guardianId: teacherAuth0Id,
+        status: "signed",
+        signedAt: new Date(),
+        paymentMethod,
+        createdAt: new Date(),
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("[recordPaymentMethodForStudent] Failed:", error);
+    return { success: false, error: "Failed to record payment. Please try again." };
   }
 }
 

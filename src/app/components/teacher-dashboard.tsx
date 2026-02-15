@@ -24,6 +24,8 @@ import {
   unlinkGuardianAction,
   uploadEventPermissionFormAction,
   uploadPermissionSlipForStudentAction,
+  recordPaymentMethodForStudentAction,
+  unsubmitSlipForTeacherAction,
   markCashReceivedAction,
   publishReportCardAction,
 } from "@/app/actions";
@@ -588,6 +590,7 @@ function StudentSubmissionsAndPaymentTable({
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 text-sm text-amber-600">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
                     No parent linked
                   </span>
                 )}
@@ -939,6 +942,7 @@ export function TeacherDashboard({
     useState<EventPermissionStatusByStudent | null>(null);
   const [editingEvent, setEditingEvent] =
     useState<CalendarEventSerialized | null>(null);
+  const [unsubmittingSlipId, setUnsubmittingSlipId] = useState<string | null>(null);
   const [uploadingManualSlipFor, setUploadingManualSlipFor] = useState<
     string | null
   >(null);
@@ -1225,17 +1229,19 @@ export function TeacherDashboard({
                         const signed =
                           status?.students.filter((s) => s.status === "signed") ??
                           [];
+                        const pendingCount = pending.length + noParent.length;
                         const statusParts = [];
-                        if (event.requiresPermissionSlip) {
-                          if (pending.length) statusParts.push(`${pending.length} pending`);
-                          if (noParent.length)
-                            statusParts.push(`${noParent.length} no parent`);
+                        const hasPaymentOrSlip =
+                          event.requiresPermissionSlip ||
+                          (event.cost != null && event.cost > 0);
+                        if (hasPaymentOrSlip) {
+                          if (pendingCount) statusParts.push(`${pendingCount} pending`);
                           if (signed.length) statusParts.push(`${signed.length} submitted`);
                         }
                         const statusText =
                           statusParts.length > 0
                             ? statusParts.join(", ")
-                            : event.requiresPermissionSlip
+                            : hasPaymentOrSlip
                               ? "No students"
                               : "—";
 
@@ -1320,17 +1326,19 @@ export function TeacherDashboard({
                         const signed =
                           status?.students.filter((s) => s.status === "signed") ??
                           [];
+                        const pendingCount = pending.length + noParent.length;
                         const statusParts = [];
-                        if (event.requiresPermissionSlip) {
-                          if (pending.length) statusParts.push(`${pending.length} pending`);
-                          if (noParent.length)
-                            statusParts.push(`${noParent.length} no parent`);
+                        const hasPaymentOrSlip =
+                          event.requiresPermissionSlip ||
+                          (event.cost != null && event.cost > 0);
+                        if (hasPaymentOrSlip) {
+                          if (pendingCount) statusParts.push(`${pendingCount} pending`);
                           if (signed.length) statusParts.push(`${signed.length} submitted`);
                         }
                         const statusText =
                           statusParts.length > 0
                             ? statusParts.join(", ")
-                            : event.requiresPermissionSlip
+                            : hasPaymentOrSlip
                               ? "No students"
                               : "—";
 
@@ -2720,7 +2728,7 @@ export function TeacherDashboard({
                                     </p>
                                   </div>
                                 )}
-                                {selectedSubmissionStudent.status === "signed" && selectedSubmissionStudent.slipId && (
+                                {selectedSubmissionStudent.status === "signed" && selectedSubmissionStudent.slipId && event?.hasPermissionForm && (
                                   <>
                                     <div className="overflow-hidden rounded-lg border border-zinc-200">
                                       <iframe
@@ -2744,67 +2752,263 @@ export function TeacherDashboard({
                                     </a>
                                   </>
                                 )}
-                                {selectedSubmissionStudent.status === "pending" && (
-                                  <p className="text-sm text-zinc-500">Awaiting submission from parent. Parents see this in their Inbox.</p>
-                                )}
-                                {selectedSubmissionStudent.status === "no_parent" && event && status?.classId && (
-                                  <div className="space-y-3 border-t border-zinc-200 pt-4">
-                                    <p className="text-sm text-zinc-500">No parent is linked to this student. You can manually upload a signed permission form (e.g. from a paper copy).</p>
-                                    <form
-                                      onSubmit={async (e) => {
-                                        e.preventDefault();
-                                        const form = e.currentTarget;
-                                        const formData = new FormData(form);
-                                        const file = formData.get("pdf") as File | null;
-                                        if (!file || file.size === 0) {
-                                          alert("Please select a PDF file");
-                                          return;
-                                        }
-                                        if (file.size > 5 * 1024 * 1024) {
-                                          alert("File is too large. Please use a PDF under 5 MB.");
-                                          return;
-                                        }
-                                        setUploadingManualSlipFor(selectedSubmissionStudent.studentId);
+                                {selectedSubmissionStudent.status === "signed" && selectedSubmissionStudent.slipId && (
+                                  <div className="pt-3 border-t border-zinc-200">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (!confirm("Unsubmit this so they can change their payment method or resubmit?")) return;
+                                        const slipId = selectedSubmissionStudent.slipId!;
+                                        const studentId = selectedSubmissionStudent.studentId;
+                                        setUnsubmittingSlipId(slipId);
+                                        const prev = permissionSlipStatusState;
+                                        setPermissionSlipStatusState((arr) =>
+                                          arr.map((ev) =>
+                                            ev.eventId !== event.id
+                                              ? ev
+                                              : {
+                                                  ...ev,
+                                                  students: ev.students.map((stu) =>
+                                                    stu.studentId !== studentId
+                                                      ? stu
+                                                      : {
+                                                          studentId: stu.studentId,
+                                                          studentName: stu.studentName,
+                                                          status: "pending" as const,
+                                                        }
+                                                  ),
+                                                  pendingCount: ev.pendingCount + 1,
+                                                  signedCount: ev.signedCount - 1,
+                                                }
+                                          )
+                                        );
+                                        setSelectedSubmissionStudent(null);
                                         try {
-                                          const { success, error } = await uploadPermissionSlipForStudentAction(event.id, status.classId, selectedSubmissionStudent.studentId, formData);
-                                          if (success) {
-                                            form.reset();
-                                            setSelectedSubmissionStudent(null);
-                                            setSelectedPermissionSlipEventId(null);
-                                            router.refresh();
-                                          } else if (error) {
+                                          const { success, error } = await unsubmitSlipForTeacherAction(slipId);
+                                          setUnsubmittingSlipId(null);
+                                          if (!success && error) {
+                                            setPermissionSlipStatusState(prev);
                                             alert(error);
+                                          } else if (success) {
+                                            router.refresh();
                                           }
-                                        } catch (err) {
-                                          alert("Something went wrong. Please try again.");
-                                        } finally {
-                                          setUploadingManualSlipFor(null);
+                                        } catch {
+                                          setUnsubmittingSlipId(null);
+                                          setPermissionSlipStatusState(prev);
+                                          alert("Something went wrong.");
                                         }
                                       }}
-                                      className="flex flex-col gap-3"
+                                      disabled={!!unsubmittingSlipId}
+                                      className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
                                     >
-                                      {(event.cost != null && event.cost > 0) && (
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-                                          <p className="mb-2 text-sm font-medium text-zinc-800">Payment method for this parent</p>
-                                          <div className="flex flex-col gap-2">
-                                            <label className="flex cursor-pointer items-center gap-2">
-                                              <input type="radio" name="paymentMethod" value="online" required={event.cost > 0} disabled={!!uploadingManualSlipFor} className="h-4 w-4 border-zinc-300 text-amber-600 focus:ring-amber-500" />
-                                              <span className="text-sm font-medium text-zinc-900">Pay online</span>
-                                            </label>
-                                            <label className="flex cursor-pointer items-center gap-2">
-                                              <input type="radio" name="paymentMethod" value="cash" defaultChecked required={event.cost > 0} disabled={!!uploadingManualSlipFor} className="h-4 w-4 border-zinc-300 text-amber-600 focus:ring-amber-500" />
-                                              <span className="text-sm font-medium text-zinc-900">Sending cash with child</span>
-                                            </label>
-                                          </div>
+                                      {unsubmittingSlipId === selectedSubmissionStudent.slipId ? "Unsubmitting..." : "Unsubmit"}
+                                    </button>
+                                  </div>
+                                )}
+                                {(selectedSubmissionStudent.status === "pending" || selectedSubmissionStudent.status === "no_parent") && event && status?.classId && (
+                                  <div className="space-y-4 border-t border-zinc-200 pt-4">
+                                    <p className="text-sm text-zinc-500">
+                                      {selectedSubmissionStudent.status === "no_parent"
+                                        ? "No parent is linked to this student."
+                                        : "Awaiting submission from parent. You can record manually if they gave you the form or told you their payment method."}
+                                      {event.hasPermissionForm
+                                        ? " Record payment method or upload a signed form."
+                                        : " Record payment method below."}
+                                    </p>
+                                    {(event.cost != null && event.cost > 0) && (
+                                      <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                                        <p className="mb-2 text-sm font-medium text-zinc-800">
+                                          {event.hasPermissionForm
+                                            ? "Payment method (no upload required)"
+                                            : "Payment method"}
+                                        </p>
+                                        <div className="flex flex-col gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              const studentId = selectedSubmissionStudent.studentId;
+                                              const studentName = selectedSubmissionStudent.studentName;
+                                              setUploadingManualSlipFor(studentId);
+                                              const prev = permissionSlipStatusState;
+                                              setPermissionSlipStatusState((arr) =>
+                                                arr.map((ev) =>
+                                                  ev.eventId !== event.id
+                                                    ? ev
+                                                    : {
+                                                        ...ev,
+                                                        students: ev.students.map((stu) =>
+                                                          stu.studentId !== studentId
+                                                            ? stu
+                                                            : {
+                                                                studentId,
+                                                                studentName,
+                                                                status: "signed" as const,
+                                                                signedBy: "Parent",
+                                                                paymentMethod: "online" as const,
+                                                              }
+                                                        ),
+                                                        pendingCount: ev.pendingCount - 1,
+                                                        signedCount: ev.signedCount + 1,
+                                                      }
+                                                )
+                                              );
+                                              setSelectedSubmissionStudent(null);
+                                              setSelectedPermissionSlipEventId(null);
+                                              try {
+                                                const { success, error } = await recordPaymentMethodForStudentAction(event.id, status.classId, studentId, "online");
+                                                if (!success && error) {
+                                                  setPermissionSlipStatusState(prev);
+                                                  alert(error);
+                                                } else if (success) {
+                                                  router.refresh();
+                                                }
+                                              } finally {
+                                                setUploadingManualSlipFor(null);
+                                              }
+                                            }}
+                                            disabled={!!uploadingManualSlipFor}
+                                            className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                                          >
+                                            Pay online
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={async () => {
+                                              const studentId = selectedSubmissionStudent.studentId;
+                                              const studentName = selectedSubmissionStudent.studentName;
+                                              setUploadingManualSlipFor(studentId);
+                                              const prev = permissionSlipStatusState;
+                                              setPermissionSlipStatusState((arr) =>
+                                                arr.map((ev) =>
+                                                  ev.eventId !== event.id
+                                                    ? ev
+                                                    : {
+                                                        ...ev,
+                                                        students: ev.students.map((stu) =>
+                                                          stu.studentId !== studentId
+                                                            ? stu
+                                                            : {
+                                                                studentId,
+                                                                studentName,
+                                                                status: "signed" as const,
+                                                                signedBy: "Parent",
+                                                                paymentMethod: "cash" as const,
+                                                              }
+                                                        ),
+                                                        pendingCount: ev.pendingCount - 1,
+                                                        signedCount: ev.signedCount + 1,
+                                                      }
+                                                )
+                                              );
+                                              setSelectedSubmissionStudent(null);
+                                              setSelectedPermissionSlipEventId(null);
+                                              try {
+                                                const { success, error } = await recordPaymentMethodForStudentAction(event.id, status.classId, studentId, "cash");
+                                                if (!success && error) {
+                                                  setPermissionSlipStatusState(prev);
+                                                  alert(error);
+                                                } else if (success) {
+                                                  router.refresh();
+                                                }
+                                              } finally {
+                                                setUploadingManualSlipFor(null);
+                                              }
+                                            }}
+                                            disabled={!!uploadingManualSlipFor}
+                                            className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                                          >
+                                            Sending cash with child
+                                          </button>
+                                          {uploadingManualSlipFor === selectedSubmissionStudent.studentId && (
+                                            <p className="text-xs text-zinc-500">Saving...</p>
+                                          )}
                                         </div>
-                                      )}
-                                      <div className="flex flex-wrap items-center gap-2">
+                                      </div>
+                                    )}
+                                    {event.hasPermissionForm && (
+                                    <div>
+                                      <p className="mb-2 text-sm font-medium text-zinc-700">Or upload a signed permission form</p>
+                                      <form
+                                        onSubmit={async (e) => {
+                                          e.preventDefault();
+                                          const form = e.currentTarget;
+                                          const formData = new FormData(form);
+                                          const file = formData.get("pdf") as File | null;
+                                          if (!file || file.size === 0) {
+                                            alert("Please select a PDF file");
+                                            return;
+                                          }
+                                          if (file.size > 5 * 1024 * 1024) {
+                                            alert("File is too large. Please use a PDF under 5 MB.");
+                                            return;
+                                          }
+                                          const studentId = selectedSubmissionStudent.studentId;
+                                          const studentName = selectedSubmissionStudent.studentName;
+                                          const paymentMethod = (formData.get("paymentMethod") as string) || "cash";
+                                          const resolvedPayment = paymentMethod === "online" ? "online" : "cash";
+                                          setUploadingManualSlipFor(studentId);
+                                          const prev = permissionSlipStatusState;
+                                          setPermissionSlipStatusState((arr) =>
+                                            arr.map((ev) =>
+                                              ev.eventId !== event.id
+                                                ? ev
+                                                : {
+                                                    ...ev,
+                                                    students: ev.students.map((stu) =>
+                                                      stu.studentId !== studentId
+                                                        ? stu
+                                                        : {
+                                                            studentId,
+                                                            studentName,
+                                                            status: "signed" as const,
+                                                            signedBy: "Parent",
+                                                            paymentMethod: resolvedPayment,
+                                                          }
+                                                    ),
+                                                    pendingCount: ev.pendingCount - 1,
+                                                    signedCount: ev.signedCount + 1,
+                                                  }
+                                            )
+                                          );
+                                          form.reset();
+                                          setSelectedSubmissionStudent(null);
+                                          setSelectedPermissionSlipEventId(null);
+                                          try {
+                                            const { success, error } = await uploadPermissionSlipForStudentAction(event.id, status.classId, studentId, formData);
+                                            if (!success && error) {
+                                              setPermissionSlipStatusState(prev);
+                                              alert(error);
+                                            } else if (success) {
+                                              router.refresh();
+                                            }
+                                          } catch (err) {
+                                            setPermissionSlipStatusState(prev);
+                                            alert("Something went wrong. Please try again.");
+                                          } finally {
+                                            setUploadingManualSlipFor(null);
+                                          }
+                                        }}
+                                        className="flex flex-wrap items-center gap-2"
+                                      >
                                         <input type="file" name="pdf" accept=".pdf,application/pdf" disabled={!!uploadingManualSlipFor} className="block text-sm text-zinc-600 file:mr-2 file:rounded-lg file:border-0 file:bg-amber-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200" />
+                                        {(event.cost != null && event.cost > 0) && (
+                                          <>
+                                            <label className="flex items-center gap-1.5 text-sm">
+                                              <input type="radio" name="paymentMethod" value="online" className="h-4 w-4 border-zinc-300 text-amber-600" />
+                                              Pay online
+                                            </label>
+                                            <label className="flex items-center gap-1.5 text-sm">
+                                              <input type="radio" name="paymentMethod" value="cash" defaultChecked className="h-4 w-4 border-zinc-300 text-amber-600" />
+                                              Cash
+                                            </label>
+                                          </>
+                                        )}
                                         <button type="submit" disabled={!!uploadingManualSlipFor} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
                                           {uploadingManualSlipFor === selectedSubmissionStudent.studentId ? "Uploading..." : "Upload signed PDF"}
                                         </button>
-                                      </div>
-                                    </form>
+                                      </form>
+                                    </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
