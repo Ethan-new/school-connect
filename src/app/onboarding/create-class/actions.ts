@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth0 } from "@/lib/auth0";
 import { createTeacherClass } from "@/lib/teacher-class";
 
@@ -20,7 +21,12 @@ export async function createClass(
     term
   );
 
-  return result.success
-    ? { success: true, code: result.code, className: result.className }
-    : { success: false, error: result.error };
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  revalidatePath("/onboarding", "layout");
+  revalidatePath("/", "layout");
+
+  return { success: true, code: result.code, className: result.className };
 }

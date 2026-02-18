@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth0 } from "@/lib/auth0";
 import { setParentName } from "@/lib/sync-user";
 
@@ -21,6 +22,9 @@ export async function saveParentName(
   const name = `${first} ${last}`;
   const ok = await setParentName(session.user.sub, name);
   if (!ok) return { success: false, error: "Failed to save name" };
+
+  revalidatePath("/onboarding", "layout");
+  revalidatePath("/", "layout");
 
   return { success: true };
 }

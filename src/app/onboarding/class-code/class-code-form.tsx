@@ -17,7 +17,6 @@ export function ClassCodeForm() {
       const { success, error: err } = await enterClassCode(code);
       if (success) {
         router.push("/");
-        router.refresh();
       } else if (err) {
         setError(err);
       }

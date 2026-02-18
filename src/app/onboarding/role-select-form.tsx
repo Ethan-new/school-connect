@@ -15,7 +15,6 @@ export function RoleSelectForm() {
       const { success, redirectTo, error: err } = await selectRole(role);
       if (success && redirectTo) {
         router.push(redirectTo);
-        router.refresh();
       } else if (err) {
         setError(err);
       }

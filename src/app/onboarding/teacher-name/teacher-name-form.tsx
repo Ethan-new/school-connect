@@ -35,7 +35,6 @@ export function TeacherNameForm({
       );
       if (success) {
         router.push(redirectTo);
-        router.refresh();
       } else if (err) {
         setError(err);
       }

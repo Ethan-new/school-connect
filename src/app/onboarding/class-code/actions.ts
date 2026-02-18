@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth0 } from "@/lib/auth0";
 import { joinClassByCode } from "@/lib/class-code";
 
@@ -12,7 +13,12 @@ export async function enterClassCode(
   }
 
   const result = await joinClassByCode(session.user.sub, code);
-  return result.success
-    ? { success: true }
-    : { success: false, error: result.error };
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  revalidatePath("/onboarding", "layout");
+  revalidatePath("/", "layout");
+
+  return { success: true };
 }

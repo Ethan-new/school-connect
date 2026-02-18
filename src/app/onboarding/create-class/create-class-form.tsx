@@ -46,10 +46,7 @@ export function CreateClassForm() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            router.push("/");
-            router.refresh();
-          }}
+          onClick={() => router.push("/")}
           className="flex h-11 w-full items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-medium text-white transition-colors hover:bg-red-700"
         >
           Continue to Dashboard

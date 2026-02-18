@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth0 } from "@/lib/auth0";
 import { setUserRole } from "@/lib/sync-user";
 import type { UserRole } from "@/lib/db/types";
@@ -18,6 +19,9 @@ export async function selectRole(
 
   const ok = await setUserRole(session.user.sub, role);
   if (!ok) return { success: false, error: "Failed to save role" };
+
+  revalidatePath("/onboarding", "layout");
+  revalidatePath("/", "layout");
 
   return {
     success: true,
